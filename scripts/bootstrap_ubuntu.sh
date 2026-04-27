@@ -4,6 +4,11 @@ set -e
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 BACKEND_DIR="$PROJECT_DIR/backend"
 FRONTEND_DIR="$PROJECT_DIR/frontend"
+SUDO=""
+
+if [ "$(id -u)" -ne 0 ]; then
+    SUDO="sudo"
+fi
 
 echo "================================"
 echo " 晨光打卡 - Ubuntu 空环境初始化"
@@ -12,8 +17,8 @@ echo ""
 
 if command -v apt-get >/dev/null 2>&1; then
     echo "[1/6] 安装系统依赖..."
-    sudo apt-get update
-    sudo apt-get install -y ca-certificates curl git gnupg lsof build-essential
+    $SUDO apt-get update
+    $SUDO apt-get install -y ca-certificates curl git gnupg lsof make build-essential
 else
     echo "[1/6] 未检测到 apt-get，跳过系统依赖安装"
 fi
@@ -30,8 +35,12 @@ if [ "$NODE_MAJOR" -lt 20 ]; then
         exit 1
     fi
     echo "安装 Node.js 22 LTS..."
-    curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-    sudo apt-get install -y nodejs
+    if [ -n "$SUDO" ]; then
+        curl -fsSL https://deb.nodesource.com/setup_22.x | $SUDO -E bash -
+    else
+        curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+    fi
+    $SUDO apt-get install -y nodejs
 else
     echo "Node.js 已满足要求: $(node -v)"
 fi
