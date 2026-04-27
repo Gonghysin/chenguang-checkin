@@ -477,7 +477,7 @@ export default function SubmitForm() {
         </button>
       </form>
 
-      {showRules && <RulesModal onClose={() => setShowRules(false)} />}
+      {showRules && <RulesModal activity={activity} onClose={() => setShowRules(false)} />}
       {showRankings && (
         <RankingsModal rankings={rankings} onClose={() => setShowRankings(false)} />
       )}
@@ -799,11 +799,24 @@ function MyStatsCard({ stats }: { stats: PublicUserStats | null }) {
   );
 }
 
-function RulesModal({ onClose }: { onClose: () => void }) {
+function RulesModal({
+  activity,
+  onClose,
+}: {
+  activity: ActivitySettings | null;
+  onClose: () => void;
+}) {
+  const checkinWindow =
+    activity?.checkin_start_time && activity?.checkin_end_time
+      ? `${activity.checkin_start_time} 至 ${activity.checkin_end_time}`
+      : "06:00 至 04:00";
+
   return (
     <Modal title="活动公告与积分规则" onClose={onClose}>
       <ul className="list-disc space-y-3 pl-5 text-sm leading-6 text-gray-700">
+        <li>当前打卡有效时间为 {checkinWindow}；若结束时间早于开始时间，则自动跨天计算。</li>
         <li>每天可提交听力、阅读、英语作文、背单词、跑步五类项目，每个达标项目记 1 分。</li>
+        <li>未达到打卡指标的项目可以保存提交记录，但不会有效加分。</li>
         <li>当天 06:30:00 至 07:40:00 内首次有效打卡可额外获得 1 分早起加分。</li>
         <li>每日最高 6 分，其中基础项目最高 5 分，早起加分最高 1 分。</li>
         <li>同一项目提交后不能取消，可以修改完成量，也可以继续追加新的截图。</li>
