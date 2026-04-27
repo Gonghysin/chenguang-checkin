@@ -1,6 +1,10 @@
 #!/bin/bash
 set -e
 
+if ! command -v uv >/dev/null 2>&1 && [ -f "$HOME/.local/bin/env" ]; then
+    . "$HOME/.local/bin/env"
+fi
+
 # 晨光打卡 - 公网服务启动脚本
 # 用法: BACKEND_URL=http://api.example.com ./scripts/start.sh
 

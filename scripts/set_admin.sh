@@ -1,6 +1,10 @@
 #!/bin/bash
 set -e
 
+if ! command -v uv >/dev/null 2>&1 && [ -f "$HOME/.local/bin/env" ]; then
+    . "$HOME/.local/bin/env"
+fi
+
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 BACKEND_DIR="$PROJECT_DIR/backend"
 

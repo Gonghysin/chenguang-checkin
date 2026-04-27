@@ -1,6 +1,10 @@
 #!/bin/bash
 set -e
 
+if ! command -v uv >/dev/null 2>&1 && [ -f "$HOME/.local/bin/env" ]; then
+    . "$HOME/.local/bin/env"
+fi
+
 # 晨光打卡 - Ubuntu 24 一键环境部署脚本
 # 用法: ./scripts/deploy.sh
 

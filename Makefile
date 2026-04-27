@@ -110,7 +110,7 @@ build-frontend:
 	@cd frontend && npm install && npm run build
 
 sync-backend:
-	@cd backend && uv sync
+	@cd backend && if ! command -v uv >/dev/null 2>&1 && [ -f "$$HOME/.local/bin/env" ]; then . "$$HOME/.local/bin/env"; fi; uv sync
 
 seed-admin:
-	@cd backend && uv run python scripts/seed_admin.py
+	@cd backend && if ! command -v uv >/dev/null 2>&1 && [ -f "$$HOME/.local/bin/env" ]; then . "$$HOME/.local/bin/env"; fi; uv run python scripts/seed_admin.py
