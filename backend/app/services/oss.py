@@ -38,10 +38,11 @@ class OSSClient:
             config=Config(signature_version="s3v4", s3={"addressing_style": "path"}),
         )
 
-    def upload_file(self, file_bytes: bytes, original_filename: str) -> dict:
+    def upload_file(self, file_bytes: bytes, original_filename: str, object_key: str | None = None) -> dict:
         ext = original_filename.split(".")[-1] if "." in original_filename else "bin"
         date_str = datetime.now().strftime("%Y-%m-%d")
-        object_key = f"submissions/{date_str}/{uuid.uuid4()}.{ext}"
+        if object_key is None:
+            object_key = f"submissions/{date_str}/{uuid.uuid4()}.{ext}"
         content_type = mimetypes.guess_type(original_filename)[0] or "application/octet-stream"
 
         logger.info(

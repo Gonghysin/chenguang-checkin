@@ -1,5 +1,7 @@
 import json
 import logging
+import re
+import uuid
 from datetime import datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -200,11 +202,10 @@ async def create_submission(
         checkin.name = name.strip()
         checkin.ip_address = request.client.host if request.client else checkin.ip_address
 
-    existing_items_result = await db.execute(
-        select(CheckinItem).where(CheckinItem.checkin_id == checkin.id)
-    )
-    item_by_type = {
-        item.item_type: item for item in existing_items_result.scalars().all()
+    item_by_type = {item.item_type: item for item in checkin.items}
+    existing_attachment_counts = {
+        item.item_type: len(item.attachments)
+        for item in checkin.items
     }
     existing_item_types = set(item_by_type)
     _validate_attachments(
@@ -226,7 +227,14 @@ async def create_submission(
             setattr(item, field_name, value)
 
     await db.flush()
-    await _store_attachments(db, item_by_type, attachment_item_types or [], attachments or [])
+    await _store_attachments(
+        db,
+        checkin,
+        item_by_type,
+        existing_attachment_counts,
+        attachment_item_types or [],
+        attachments or [],
+    )
     await db.flush()
 
     all_items = list(item_by_type.values())
@@ -373,16 +381,29 @@ def _evaluate_item(item_type: str, values: dict[str, Any]) -> dict[str, Any]:
 
 async def _store_attachments(
     db: AsyncSession,
+    checkin: DailyCheckin,
     item_by_type: dict[str, CheckinItem],
+    existing_attachment_counts: dict[str, int],
     attachment_item_types: list[str],
     attachments: list[UploadFile],
 ) -> None:
     for item_type, attachment in zip(attachment_item_types, attachments):
         item = item_by_type[item_type]
+        next_index = existing_attachment_counts.get(item_type, 0) + 1
+        existing_attachment_counts[item_type] = next_index
+        formatted_filename = _format_attachment_filename(
+            checkin,
+            item_type,
+            next_index,
+            attachment.filename or "attachment",
+            attachment.content_type,
+        )
+        object_key = _format_attachment_object_key(checkin, item_type, next_index, formatted_filename)
         logger.info(
-            "attachment_upload_start item_type=%s filename=%s content_type=%s",
+            "attachment_upload_start item_type=%s filename=%s formatted_filename=%s content_type=%s",
             item_type,
             attachment.filename,
+            formatted_filename,
             attachment.content_type,
         )
         file_bytes = await attachment.read()
@@ -390,7 +411,11 @@ async def _store_attachments(
             raise HTTPException(status_code=400, detail=f"{attachment.filename} 是空文件")
 
         try:
-            upload_result = get_oss_client().upload_file(file_bytes, attachment.filename or "attachment")
+            upload_result = get_oss_client().upload_file(
+                file_bytes,
+                formatted_filename,
+                object_key=object_key,
+            )
         except Exception:
             logger.exception(
                 "attachment_upload_failed item_type=%s filename=%s size=%s",
@@ -409,13 +434,69 @@ async def _store_attachments(
             CheckinAttachment(
                 item_id=item.id,
                 item_type=item_type,
-                file_name=attachment.filename or "attachment",
+                file_name=formatted_filename,
                 file_url=upload_result["file_url"],
                 file_size=len(file_bytes),
                 file_type=attachment.content_type or "application/octet-stream",
                 oss_key=upload_result["oss_key"],
             )
         )
+
+
+def _format_attachment_filename(
+    checkin: DailyCheckin,
+    item_type: str,
+    sequence: int,
+    original_filename: str,
+    content_type: str | None,
+) -> str:
+    ext = _file_extension(original_filename, content_type)
+    name = _sanitize_filename_part(checkin.name)
+    student_id = _sanitize_filename_part(checkin.student_id)
+    item_label = ITEM_LABELS[item_type]
+    date_text = checkin.checkin_date.strftime("%Y%m%d")
+    return f"{date_text}_{student_id}_{name}_{item_label}_{sequence:02d}{ext}"
+
+
+def _format_attachment_object_key(
+    checkin: DailyCheckin,
+    item_type: str,
+    sequence: int,
+    formatted_filename: str,
+) -> str:
+    ext = _file_extension(formatted_filename, None)
+    date_text = checkin.checkin_date.strftime("%Y-%m-%d")
+    student_id = _sanitize_path_part(checkin.student_id)
+    return f"submissions/{date_text}/{student_id}/{item_type}/{sequence:02d}_{uuid.uuid4().hex}{ext}"
+
+
+def _file_extension(filename: str, content_type: str | None) -> str:
+    if "." in filename:
+        raw_ext = filename.rsplit(".", 1)[-1].lower()
+        safe_ext = re.sub(r"[^a-z0-9]", "", raw_ext)
+        if safe_ext:
+            return f".{safe_ext[:12]}"
+
+    if content_type == "image/jpeg":
+        return ".jpg"
+    if content_type == "image/png":
+        return ".png"
+    if content_type == "image/webp":
+        return ".webp"
+    if content_type == "application/pdf":
+        return ".pdf"
+    return ".bin"
+
+
+def _sanitize_filename_part(value: str) -> str:
+    cleaned = re.sub(r'[\\/:*?"<>|]+', "", value.strip())
+    cleaned = re.sub(r"\s+", "", cleaned)
+    return cleaned[:40] or "unknown"
+
+
+def _sanitize_path_part(value: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9_-]+", "-", value.strip())
+    return cleaned.strip("-")[:40] or "unknown"
 
 
 async def _load_checkin(db: AsyncSession, checkin_id: str) -> DailyCheckin:
