@@ -22,7 +22,7 @@
 
 ## 技术栈
 
-- 后端：Python + FastAPI + SQLAlchemy 2.0 async + Alembic + 腾讯云 COS
+- 后端：Python + FastAPI + SQLAlchemy 2.0 async + Alembic + Sealos 对象存储
 - 前端：React + Vite + Tailwind CSS + React Router
 - 数据库：SQLite/PostgreSQL，取决于 `DATABASE_URL`
 
@@ -68,7 +68,15 @@ make set-admin
 make nohup
 ```
 
-`make bootstrap` 会安装系统依赖、Node.js 22、uv，并同步前后端依赖。首次运行会创建 `backend/.env`，需要在服务器上填入真实 COS 配置；该文件已被 `.gitignore` 排除，不会上传到 GitHub。
+`make bootstrap` 会安装系统依赖、Node.js 22、uv，并同步前后端依赖。首次运行会创建 `backend/.env`，需要在服务器上填入真实对象存储配置；该文件已被 `.gitignore` 排除，不会上传到 GitHub。
+
+配置 Sealos 对象存储：
+
+```bash
+make configure-oss
+```
+
+该命令会交互询问 Access Key、Secret Key、Internal endpoint、External endpoint 和桶名称，并写入本机 `backend/.env`。不要把真实密钥写入 `.env.example` 或提交到 Git。
 
 `make nohup` 会交互询问两个公网地址：
 
@@ -131,4 +139,4 @@ make update BACKEND_URL=http://api.example.com
 - 管理密码使用 bcrypt 哈希存储。
 - 管理接口使用签名 Cookie 鉴权。
 - 积分规则在服务端计算，前端提交的分数不被信任。
-- 文件下载通过 COS 临时签名 URL。
+- 文件预览通过 Sealos 对象存储临时签名 URL。

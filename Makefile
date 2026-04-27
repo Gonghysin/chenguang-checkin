@@ -1,6 +1,6 @@
 PORTS ?= 8000 5173 5174
 
-.PHONY: help clear-ports dev bootstrap setup deploy start nohup nohup-stop nohup-status nohup-logs update stop restart status logs backend-logs set-admin build-frontend sync-backend seed-admin
+.PHONY: help clear-ports dev bootstrap setup deploy start nohup nohup-stop nohup-status nohup-logs update stop restart status logs backend-logs set-admin configure-oss build-frontend sync-backend seed-admin
 
 help:
 	@echo "可用命令:"
@@ -11,6 +11,7 @@ help:
 	@echo "  make nohup-stop                  停止 nohup 启动的服务"
 	@echo "  make nohup-status                查看 nohup 服务状态"
 	@echo "  make nohup-logs                  查看 nohup 服务日志"
+	@echo "  make configure-oss               交互式配置 Sealos 对象存储到 backend/.env"
 	@echo "  make deploy BACKEND_URL=<url>    一键安装依赖、构建前端、初始化后端并用 PM2 启动"
 	@echo "  make start BACKEND_URL=<url>     构建并启动前后端 PM2 服务"
 	@echo "  make update BACKEND_URL=<url>    拉取代码、重建前端、同步后端依赖并重启"
@@ -101,6 +102,9 @@ backend-logs:
 
 set-admin:
 	@./scripts/set_admin.sh
+
+configure-oss:
+	@bash ./scripts/configure_oss.sh
 
 build-frontend:
 	@cd frontend && npm install && npm run build

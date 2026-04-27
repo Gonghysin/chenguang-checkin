@@ -57,7 +57,7 @@ esac
 mkdir -p "$LOG_DIR"
 
 if [ ! -f "$BACKEND_DIR/.env" ]; then
-    echo "错误: backend/.env 不存在。请先运行 make bootstrap，并填入 COS 配置。"
+    echo "错误: backend/.env 不存在。请先运行 make bootstrap，并配置 Sealos 对象存储。"
     exit 1
 fi
 

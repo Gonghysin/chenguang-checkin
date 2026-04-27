@@ -31,7 +31,7 @@ if [ ! -f ".env" ]; then
     echo ""
     echo "=========================================="
     echo " 警告: .env 文件已自动创建"
-    echo " 请编辑 backend/.env，填入真实的 COS 配置"
+    echo " 请运行 make configure-oss，填入真实的 Sealos 对象存储配置"
     echo "=========================================="
     echo ""
 fi

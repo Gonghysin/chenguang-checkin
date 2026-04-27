@@ -36,7 +36,7 @@ esac
 
 if [ ! -f backend/.env ]; then
     echo "错误: backend/.env 不存在"
-    echo "请先复制 .env.example 并填入 COS 密钥等配置"
+    echo "请先复制 .env.example 并填入 Sealos 对象存储密钥等配置"
     exit 1
 fi
 

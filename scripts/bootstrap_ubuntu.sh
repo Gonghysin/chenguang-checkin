@@ -64,13 +64,13 @@ echo "[6/6] 检查 backend/.env..."
 cd "$BACKEND_DIR"
 if [ ! -f ".env" ]; then
     cp .env.example .env
-    echo "已创建 backend/.env，请填入 COS 配置和管理员初始化变量。"
+    echo "已创建 backend/.env，请填入 Sealos 对象存储配置和管理员初始化变量。"
 fi
 
 mkdir -p "$PROJECT_DIR/logs"
 
 echo ""
 echo "初始化完成。下一步:"
-echo "  1. 编辑 backend/.env，填入真实 COS 配置"
+echo "  1. 运行 make configure-oss 配置 Sealos 对象存储"
 echo "  2. 运行 make set-admin 设置管理员账号"
 echo "  3. 运行 make nohup 并按提示填写 Sealos 公网地址"
