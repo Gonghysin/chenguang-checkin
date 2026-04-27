@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Response, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -264,11 +264,21 @@ async def update_admin_activity(
         raise HTTPException(status_code=400, detail="活动名称不能为空")
     if payload.duration_days <= 0:
         raise HTTPException(status_code=400, detail="持续天数必须大于 0")
+    for field_name, value in {
+        "打卡开始时间": payload.checkin_start_time,
+        "打卡结束时间": payload.checkin_end_time,
+    }.items():
+        try:
+            datetime.strptime(value, "%H:%M")
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"{field_name}格式必须为 HH:MM")
 
     activity = await get_or_create_activity_settings(db)
     activity.name = payload.name.strip()
     activity.start_date = payload.start_date
     activity.duration_days = payload.duration_days
+    activity.checkin_start_time = payload.checkin_start_time
+    activity.checkin_end_time = payload.checkin_end_time
     activity.is_active = payload.is_active
     await db.commit()
     await db.refresh(activity)

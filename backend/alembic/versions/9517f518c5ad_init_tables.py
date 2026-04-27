@@ -33,6 +33,8 @@ def upgrade() -> None:
     sa.Column('name', sa.String(length=100), nullable=False),
     sa.Column('start_date', sa.Date(), nullable=False),
     sa.Column('duration_days', sa.Integer(), nullable=False),
+    sa.Column('checkin_start_time', sa.String(length=5), nullable=False),
+    sa.Column('checkin_end_time', sa.String(length=5), nullable=False),
     sa.Column('is_active', sa.Boolean(), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=True),
     sa.PrimaryKeyConstraint('id')

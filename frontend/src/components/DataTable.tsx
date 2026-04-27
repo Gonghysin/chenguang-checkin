@@ -189,6 +189,8 @@ export default function DataTable({ onLogout }: DataTableProps) {
         name: activity.name,
         start_date: activity.start_date,
         duration_days: activity.duration_days,
+        checkin_start_time: activity.checkin_start_time,
+        checkin_end_time: activity.checkin_end_time,
         is_active: activity.is_active,
       });
       setActivity(saved);
@@ -773,6 +775,33 @@ function SettingsView({
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-100"
           />
         </label>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="block">
+            <span className="mb-1 block text-sm font-medium text-gray-700">每日打卡开始时间</span>
+            <input
+              type="time"
+              value={activity.checkin_start_time}
+              onChange={(event) =>
+                onChange({ ...activity, checkin_start_time: event.target.value })
+              }
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-100"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-sm font-medium text-gray-700">每日打卡结束时间</span>
+            <input
+              type="time"
+              value={activity.checkin_end_time}
+              onChange={(event) =>
+                onChange({ ...activity, checkin_end_time: event.target.value })
+              }
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-100"
+            />
+          </label>
+        </div>
+        <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
+          如果结束时间早于开始时间，系统会自动跨天计算。例如 06:00 到 04:00 表示早上 6 点至次日凌晨 4 点都归入开始当天。
+        </div>
         <label className="flex items-center gap-2 text-sm text-gray-700">
           <input
             type="checkbox"

@@ -12,7 +12,13 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.models import CheckinAttachment, CheckinItem, DailyCheckin
 from app.services.oss import get_oss_client
-from app.services.activity import build_activity_response, get_or_create_activity_settings
+from app.services.activity import (
+    build_activity_response,
+    checkin_window_label,
+    get_checkin_date_at,
+    get_or_create_activity_settings,
+    is_within_checkin_window,
+)
 from app.services.rankings import build_ranking_rows, public_ranking_payload
 from app.schemas import ActivitySettingsOut, DailyCheckinOut, PublicRankingOut, PublicUserStatsOut, SubmissionResult
 
@@ -47,10 +53,13 @@ async def get_today_submission(
     if not student_id.strip():
         raise HTTPException(status_code=400, detail="学号不能为空")
 
+    activity = await get_or_create_activity_settings(db)
+    checkin_date = get_checkin_date_at(activity, datetime.now(CHINA_TZ))
+
     result = await db.execute(
         select(DailyCheckin)
         .where(DailyCheckin.student_id == student_id.strip())
-        .where(DailyCheckin.checkin_date == datetime.now(CHINA_TZ).date())
+        .where(DailyCheckin.checkin_date == checkin_date)
         .options(selectinload(DailyCheckin.items).selectinload(CheckinItem.attachments))
     )
     checkin = result.scalar_one_or_none()
@@ -121,13 +130,16 @@ async def download_my_attachment(
     if not student_id.strip():
         raise HTTPException(status_code=400, detail="学号不能为空")
 
+    activity = await get_or_create_activity_settings(db)
+    checkin_date = get_checkin_date_at(activity, datetime.now(CHINA_TZ))
+
     result = await db.execute(
         select(CheckinAttachment)
         .join(CheckinItem, CheckinAttachment.item_id == CheckinItem.id)
         .join(DailyCheckin, CheckinItem.checkin_id == DailyCheckin.id)
         .where(CheckinAttachment.id == attachment_id)
         .where(DailyCheckin.student_id == student_id.strip())
-        .where(DailyCheckin.checkin_date == datetime.now(CHINA_TZ).date())
+        .where(DailyCheckin.checkin_date == checkin_date)
     )
     attachment = result.scalar_one_or_none()
     if not attachment:
@@ -157,8 +169,14 @@ async def create_submission(
         len(attachments or []),
     )
 
+    activity = await get_or_create_activity_settings(db)
     now = datetime.now(CHINA_TZ)
-    checkin_date = now.date()
+    if not is_within_checkin_window(activity, now):
+        raise HTTPException(
+            status_code=400,
+            detail=f"当前不在打卡有效时间内，本活动有效时间为 {checkin_window_label(activity)}",
+        )
+    checkin_date = get_checkin_date_at(activity, now)
 
     result = await db.execute(
         select(DailyCheckin)

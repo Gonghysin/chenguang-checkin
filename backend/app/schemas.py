@@ -11,6 +11,8 @@ class ActivitySettingsOut(BaseModel):
     name: str
     start_date: date
     duration_days: int
+    checkin_start_time: str
+    checkin_end_time: str
     is_active: bool
     current_day: int
     progress_percent: float
@@ -20,6 +22,8 @@ class ActivitySettingsUpdate(BaseModel):
     name: str
     start_date: date
     duration_days: int
+    checkin_start_time: str
+    checkin_end_time: str
     is_active: bool = True
 
 

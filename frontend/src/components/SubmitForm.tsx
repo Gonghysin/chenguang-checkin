@@ -173,6 +173,7 @@ export default function SubmitForm() {
     [items]
   );
   const todayCheckin = success?.checkin ?? myStats?.latest_checkin ?? null;
+  const successHasEffectivePoints = (success?.checkin.base_points ?? 0) > 0;
   const earnedMorningBonus = Boolean(
     todayCheckin?.earned_morning_bonus && (todayCheckin?.base_points ?? 0) > 0
   );
@@ -349,12 +350,20 @@ export default function SubmitForm() {
 
       <form onSubmit={handleSubmit} className="space-y-5 px-4 py-5 sm:px-6">
         {success && (
-          <div className="flex items-start gap-2 rounded-lg bg-emerald-50 px-3 py-3 text-sm text-emerald-700 sm:px-4">
-            <CheckCircle size={18} />
+          <div
+            className={`flex items-start gap-2 rounded-lg px-3 py-3 text-sm sm:px-4 ${
+              successHasEffectivePoints
+                ? "bg-emerald-50 text-emerald-700"
+                : "bg-amber-50 text-amber-800"
+            }`}
+          >
+            {successHasEffectivePoints ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
             <span>
-              已保存：基础 {success.checkin.base_points} 分，早起加分{" "}
-              {success.checkin.earned_morning_bonus ? 1 : 0} 分，今日共{" "}
-              {success.checkin.total_points} 分
+              {successHasEffectivePoints
+                ? `已保存：基础 ${success.checkin.base_points} 分，早起加分 ${
+                    success.checkin.earned_morning_bonus ? 1 : 0
+                  } 分，今日共 ${success.checkin.total_points} 分`
+                : "已提交，但当前完成量未达到有效打卡要求，暂未加分。可修改完成量后重新保存。"}
             </span>
           </div>
         )}

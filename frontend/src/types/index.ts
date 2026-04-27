@@ -10,6 +10,8 @@ export interface ActivitySettings {
   name: string;
   start_date: string;
   duration_days: number;
+  checkin_start_time: string;
+  checkin_end_time: string;
   is_active: boolean;
   current_day: number;
   progress_percent: number;

@@ -10,6 +10,7 @@ from app.config import settings
 from app.database import engine, Base
 from app.logging_config import setup_logging
 from app.routers import submissions, admin
+from app.services.activity import ensure_activity_settings_columns
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -77,6 +78,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 async def on_startup():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(ensure_activity_settings_columns)
     logger.info("backend_started title=%s frontend_url=%s", app.title, settings.frontend_url)
 
 
