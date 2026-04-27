@@ -1,6 +1,6 @@
 PORTS ?= 8000 5173 5174
 
-.PHONY: help clear-ports dev bootstrap setup deploy start nohup nohup-stop nohup-status nohup-logs update stop restart status logs backend-logs set-admin configure-oss build-frontend sync-backend seed-admin
+.PHONY: help clear-ports dev bootstrap setup deploy start nohup rolling-update nohup-stop nohup-status nohup-logs update stop restart status logs backend-logs set-admin configure-oss build-frontend sync-backend seed-admin
 
 help:
 	@echo "可用命令:"
@@ -8,6 +8,7 @@ help:
 	@echo "  make dev                         本地一键启动后端 8000 和前端 5173"
 	@echo "  make bootstrap                   Ubuntu 空环境安装系统依赖、uv、Node、前后端依赖"
 	@echo "  make nohup                       交互填写公网地址，用 nohup 启动后端 8000 和前端 5173"
+	@echo "  make rolling-update              拉取远程 main，重新构建并重启 nohup 服务"
 	@echo "  make nohup-stop                  停止 nohup 启动的服务"
 	@echo "  make nohup-status                查看 nohup 服务状态"
 	@echo "  make nohup-logs                  查看 nohup 服务日志"
@@ -65,6 +66,9 @@ start: clear-ports
 
 nohup: clear-ports
 	@bash ./scripts/nohup_start.sh
+
+rolling-update:
+	@bash ./scripts/rolling_update.sh
 
 nohup-stop:
 	@bash ./scripts/nohup_start.sh stop

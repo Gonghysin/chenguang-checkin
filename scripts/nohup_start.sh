@@ -11,6 +11,7 @@ FRONTEND_DIR="$PROJECT_DIR/frontend"
 LOG_DIR="$PROJECT_DIR/logs"
 BACKEND_PID="$LOG_DIR/backend.pid"
 FRONTEND_PID="$LOG_DIR/frontend.pid"
+NOHUP_ENV="$LOG_DIR/nohup.env"
 FRONTEND_PORT="${FRONTEND_PORT:-5173}"
 BACKEND_PORT="${BACKEND_PORT:-8000}"
 
@@ -79,6 +80,13 @@ if [ -z "$BACKEND_URL" ] || [ -z "$FRONTEND_URL" ]; then
     echo "错误: 后端公网地址和前端公网地址不能为空"
     exit 1
 fi
+
+{
+    printf 'BACKEND_URL=%q\n' "${BACKEND_URL%/}"
+    printf 'FRONTEND_URL=%q\n' "${FRONTEND_URL%/}"
+    printf 'BACKEND_PORT=%q\n' "$BACKEND_PORT"
+    printf 'FRONTEND_PORT=%q\n' "$FRONTEND_PORT"
+} > "$NOHUP_ENV"
 
 API_BASE="${BACKEND_URL%/}"
 case "$API_BASE" in

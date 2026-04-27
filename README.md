@@ -89,6 +89,7 @@ nohup 运维命令：
 make nohup-status
 make nohup-logs
 make nohup-stop
+make rolling-update
 ```
 
 本地启动可以使用：
