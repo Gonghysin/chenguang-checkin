@@ -34,6 +34,16 @@ app.add_middleware(
 )
 
 
+@app.get("/")
+async def root():
+    return {"name": app.title, "status": "ok", "docs": "/docs"}
+
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     started_at = time.perf_counter()

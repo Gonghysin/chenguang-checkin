@@ -202,10 +202,16 @@ async def create_submission(
         checkin.name = name.strip()
         checkin.ip_address = request.client.host if request.client else checkin.ip_address
 
-    item_by_type = {item.item_type: item for item in checkin.items}
+    existing_items_result = await db.execute(
+        select(CheckinItem)
+        .where(CheckinItem.checkin_id == checkin.id)
+        .options(selectinload(CheckinItem.attachments))
+    )
+    existing_items = existing_items_result.scalars().all()
+    item_by_type = {item.item_type: item for item in existing_items}
     existing_attachment_counts = {
         item.item_type: len(item.attachments)
-        for item in checkin.items
+        for item in existing_items
     }
     existing_item_types = set(item_by_type)
     _validate_attachments(
@@ -221,6 +227,7 @@ async def create_submission(
             db.add(item)
             await db.flush()
             item_by_type[item_type] = item
+            existing_attachment_counts[item_type] = 0
 
         values = _evaluate_item(item_type, raw_values)
         for field_name, value in values.items():
