@@ -99,6 +99,9 @@ export default function SubmitForm() {
   const [rankings, setRankings] = useState<PublicRanking[]>([]);
   const [myStats, setMyStats] = useState<PublicUserStats | null>(null);
   const [lockedItemTypes, setLockedItemTypes] = useState<CheckinItemType[]>([]);
+  const [submittedValidity, setSubmittedValidity] = useState<Record<CheckinItemType, boolean>>(
+    initialSubmittedValidity
+  );
   const [showRules, setShowRules] = useState(false);
   const [showRankings, setShowRankings] = useState(false);
   const [previewUrl, setPreviewUrl] = useState("");
@@ -139,6 +142,7 @@ export default function SubmitForm() {
     const trimmedStudentId = studentId.trim();
     if (!trimmedStudentId) {
       setLockedItemTypes([]);
+      setSubmittedValidity(initialSubmittedValidity());
       return;
     }
 
@@ -147,16 +151,19 @@ export default function SubmitForm() {
         .then((checkin) => {
           if (!checkin) {
             setLockedItemTypes([]);
+            setSubmittedValidity(initialSubmittedValidity());
             return;
           }
 
           const submittedTypes = checkin.items.map((item) => item.item_type);
           setLockedItemTypes(submittedTypes);
+          setSubmittedValidity(validityFromItems(checkin.items));
           setItems((prev) => applyExistingCheckin(prev, checkin.items));
           setExistingAttachments(attachmentsFromItems(checkin.items));
         })
         .catch(() => {
           setLockedItemTypes([]);
+          setSubmittedValidity(initialSubmittedValidity());
           setExistingAttachments(initialAttachments());
         });
 
@@ -284,6 +291,7 @@ export default function SubmitForm() {
         setFiles(initialFiles());
         const submittedTypes = result.checkin.items.map((item) => item.item_type);
         setLockedItemTypes(submittedTypes);
+        setSubmittedValidity(validityFromItems(result.checkin.items));
         setItems((prev) => applyExistingCheckin(prev, result.checkin.items));
         setExistingAttachments(attachmentsFromItems(result.checkin.items));
         listPublicRankings()
@@ -429,27 +437,14 @@ export default function SubmitForm() {
               </span>
             </div>
             {ITEM_META.map((meta) => (
-              <button
+              <ProjectCard
                 key={meta.type}
-                type="button"
-                disabled={lockedItemTypes.includes(meta.type)}
+                meta={meta}
+                selected={items[meta.type].selected}
+                locked={lockedItemTypes.includes(meta.type)}
+                valid={submittedValidity[meta.type]}
                 onClick={() => setSelected(meta.type, !items[meta.type].selected)}
-                className={`min-h-24 rounded-lg border px-3 py-2 text-left text-sm transition sm:min-h-0 ${
-                  items[meta.type].selected
-                    ? "border-emerald-500 bg-emerald-50 text-emerald-800"
-                    : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
-                } ${lockedItemTypes.includes(meta.type) ? "cursor-not-allowed opacity-90" : ""}`}
-              >
-                <span className="flex items-center justify-between gap-2 font-medium">
-                  {meta.label}
-                  {lockedItemTypes.includes(meta.type) && (
-                    <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] text-emerald-700">
-                      已提交
-                    </span>
-                  )}
-                </span>
-                <span className="mt-1 block text-xs text-gray-500">{meta.target}</span>
-              </button>
+              />
             ))}
           </div>
         </div>
@@ -500,6 +495,51 @@ export default function SubmitForm() {
   );
 }
 
+function ProjectCard({
+  meta,
+  selected,
+  locked,
+  valid,
+  onClick,
+}: {
+  meta: (typeof ITEM_META)[number];
+  selected: boolean;
+  locked: boolean;
+  valid: boolean;
+  onClick: () => void;
+}) {
+  const lockedClass = valid
+    ? "border-emerald-500 bg-emerald-50 text-emerald-800"
+    : "border-amber-300 bg-amber-50 text-amber-900";
+  const selectedClass = "border-emerald-500 bg-emerald-50 text-emerald-800";
+  const idleClass = "border-gray-200 bg-white text-gray-700 hover:border-gray-300";
+
+  return (
+    <button
+      type="button"
+      disabled={locked}
+      onClick={onClick}
+      className={`min-h-24 rounded-lg border px-3 py-2 text-left text-sm transition sm:min-h-0 ${
+        locked ? lockedClass : selected ? selectedClass : idleClass
+      } ${locked ? "cursor-not-allowed opacity-90" : ""}`}
+    >
+      <span className="flex items-center justify-between gap-2 font-medium">
+        {meta.label}
+        {locked && (
+          <span
+            className={`rounded px-1.5 py-0.5 text-[11px] ${
+              valid ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-800"
+            }`}
+          >
+            {valid ? "已加分" : "未加分"}
+          </span>
+        )}
+      </span>
+      <span className="mt-1 block text-xs text-gray-500">{meta.target}</span>
+    </button>
+  );
+}
+
 function buildItemPayload(type: CheckinItemType, item: ItemValues): Record<string, string> {
   if (type === "listening") return { listening_questions: item.listening_questions };
   if (type === "reading") {
@@ -545,6 +585,24 @@ function attachmentsFromItems(items: CheckinItem[]): Record<CheckinItemType, Che
   const next = initialAttachments();
   for (const item of items) {
     next[item.item_type] = item.attachments;
+  }
+  return next;
+}
+
+function initialSubmittedValidity(): Record<CheckinItemType, boolean> {
+  return {
+    listening: false,
+    reading: false,
+    writing: false,
+    vocabulary: false,
+    running: false,
+  };
+}
+
+function validityFromItems(items: CheckinItem[]): Record<CheckinItemType, boolean> {
+  const next = initialSubmittedValidity();
+  for (const item of items) {
+    next[item.item_type] = item.is_valid;
   }
   return next;
 }
