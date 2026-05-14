@@ -56,7 +56,7 @@ if ! project_command_exists uv; then
     exit 1
 fi
 
-run_project_step "[4/6] 安装后端依赖..." "$BACKEND_DIR" "uv sync --locked"
+run_project_step "[4/6] 安装后端依赖..." "$BACKEND_DIR" "uv sync --frozen"
 
 if [ -f "$FRONTEND_DIR/package-lock.json" ]; then
     run_project_step "[5/6] 安装前端依赖..." "$FRONTEND_DIR" "npm ci"

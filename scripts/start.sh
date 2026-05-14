@@ -71,7 +71,7 @@ else
 fi
 run_project_step "[4/6] 构建前端（生产环境）..." "$FRONTEND_DIR" "VITE_API_BASE=$(shell_quote "$API_BASE") npm run build"
 
-run_project_step "[5/6] 检查后端依赖..." "$BACKEND_DIR" "uv sync --locked"
+run_project_step "[5/6] 检查后端依赖..." "$BACKEND_DIR" "uv sync --frozen"
 
 run_project_step "[6/6] 初始化数据库..." "$BACKEND_DIR" "uv run python scripts/seed_admin.py"
 
