@@ -16,6 +16,7 @@ from app.schemas import (
     ActivitySettingsUpdate,
     AdminLogin,
     AdminOut,
+    AdminSessionOut,
     DailyCheckinOut,
     RankingOut,
 )
@@ -27,6 +28,7 @@ from app.services.session import (
     CSRF_COOKIE_NAME,
     create_csrf_token,
     create_session_cookie,
+    get_current_admin_session,
     get_current_admin_username,
     require_admin_csrf,
 )
@@ -113,7 +115,7 @@ async def admin_login(
         samesite="lax",
         max_age=86400,
     )
-    return {"success": True}
+    return {"success": True, "csrf_token": csrf_token}
 
 
 @router.post("/logout")
@@ -136,16 +138,22 @@ async def admin_logout(
     return {"success": True}
 
 
-@router.get("/me", response_model=AdminOut)
+@router.get("/me", response_model=AdminSessionOut)
 async def admin_me(
-    username: str = Depends(get_current_admin_username),
+    session_data: dict = Depends(get_current_admin_session),
     db: AsyncSession = Depends(get_db),
 ):
+    username = session_data["username"]
     result = await db.execute(select(Admin).where(Admin.username == username))
     admin = result.scalar_one_or_none()
     if not admin:
         raise HTTPException(status_code=401, detail="管理员不存在")
-    return admin
+    return {
+        "id": admin.id,
+        "username": admin.username,
+        "created_at": admin.created_at,
+        "csrf_token": session_data["csrf_token"],
+    }
 
 
 @router.get("/submissions", response_model=dict)

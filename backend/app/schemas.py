@@ -133,6 +133,10 @@ class AdminOut(BaseModel):
     created_at: datetime
 
 
+class AdminSessionOut(AdminOut):
+    csrf_token: str
+
+
 class RankingOut(BaseModel):
     rank: int
     name: str

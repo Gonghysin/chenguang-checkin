@@ -14,6 +14,7 @@ import type {
 const API_BASE = import.meta.env.VITE_API_BASE || "/api";
 const CSRF_COOKIE_NAME = "admin_csrf";
 const CSRF_HEADER_NAME = "X-CSRF-Token";
+const CSRF_STORAGE_KEY = "admin_csrf_token";
 
 function readCookie(name: string): string {
   const prefix = `${name}=`;
@@ -30,12 +31,23 @@ function buildHeaders(options?: RequestInit): Headers {
   const headers = new Headers(options?.headers);
   const method = (options?.method || "GET").toUpperCase();
   if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
-    const csrfToken = readCookie(CSRF_COOKIE_NAME);
+    const csrfToken = sessionStorage.getItem(CSRF_STORAGE_KEY) || readCookie(CSRF_COOKIE_NAME);
     if (csrfToken) {
       headers.set(CSRF_HEADER_NAME, csrfToken);
     }
   }
   return headers;
+}
+
+function rememberCsrfToken(payload: unknown) {
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "csrf_token" in payload &&
+    typeof payload.csrf_token === "string"
+  ) {
+    sessionStorage.setItem(CSRF_STORAGE_KEY, payload.csrf_token);
+  }
 }
 
 async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
@@ -49,7 +61,9 @@ async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail || res.statusText);
   }
-  return res.json() as Promise<T>;
+  const data = (await res.json()) as T;
+  rememberCsrfToken(data);
+  return data;
 }
 
 export async function getActivity(): Promise<ActivitySettings> {
@@ -88,7 +102,7 @@ export async function submitForm(data: FormData): Promise<SubmissionResult> {
 export async function loginAdmin(
   username: string,
   password: string
-): Promise<{ success: boolean }> {
+): Promise<{ success: boolean; csrf_token: string }> {
   return fetchApi("/admin/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -97,7 +111,11 @@ export async function loginAdmin(
 }
 
 export async function logoutAdmin(): Promise<{ success: boolean }> {
-  return fetchApi("/admin/logout", { method: "POST" });
+  try {
+    return await fetchApi("/admin/logout", { method: "POST" });
+  } finally {
+    sessionStorage.removeItem(CSRF_STORAGE_KEY);
+  }
 }
 
 export async function getAdminMe(): Promise<unknown> {

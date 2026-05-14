@@ -39,6 +39,13 @@ def get_current_admin_username(request: Request) -> str:
     return verify_session_cookie(cookie)["username"]
 
 
+def get_current_admin_session(request: Request) -> dict:
+    cookie = request.cookies.get(COOKIE_NAME)
+    if not cookie:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    return verify_session_cookie(cookie)
+
+
 def require_admin_csrf(request: Request) -> str:
     cookie = request.cookies.get(COOKIE_NAME)
     if not cookie:
