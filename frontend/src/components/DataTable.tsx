@@ -158,7 +158,7 @@ export default function DataTable({ onLogout }: DataTableProps) {
   const handlePreviewAttachment = useCallback(async (attachment: CheckinAttachment) => {
     try {
       const res = await getDownloadUrl(attachment.id);
-      setPreviewTitle(attachment.file_name);
+      setPreviewTitle(attachment.file_name || attachment.display_name || "打卡附件");
       setPreviewUrl(res.download_url);
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "图片预览失败");
@@ -945,8 +945,8 @@ function CheckinDetailModal({
         <Stat label="完成量" value={checkin.total_volume.toFixed(2)} />
       </div>
       <div className="space-y-3">
-        {checkin.items.map((item) => (
-          <div key={item.id} className="rounded-lg border border-gray-200 p-3">
+        {checkin.items.map((item, index) => (
+          <div key={item.id || `${item.item_type}-${index}`} className="rounded-lg border border-gray-200 p-3">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="font-medium text-gray-900">{ITEM_LABELS[item.item_type]}</div>
@@ -965,7 +965,7 @@ function CheckinDetailModal({
                   className="inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-1 text-xs text-gray-700 hover:bg-gray-200"
                 >
                   <Eye size={12} />
-                  {attachment.file_name}
+                  {attachment.file_name || attachment.display_name || "打卡附件"}
                 </button>
               ))}
             </div>

@@ -4,6 +4,7 @@ import type {
   AdminParticipantSummary,
   DailyCheckin,
   PaginationResponse,
+  PublicDailyCheckin,
   PublicRanking,
   PublicUserStats,
   Ranking,
@@ -11,12 +12,38 @@ import type {
 } from "../types";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "/api";
+const CSRF_COOKIE_NAME = "admin_csrf";
+const CSRF_HEADER_NAME = "X-CSRF-Token";
+
+function readCookie(name: string): string {
+  const prefix = `${name}=`;
+  return (
+    document.cookie
+      .split(";")
+      .map((part) => part.trim())
+      .find((part) => part.startsWith(prefix))
+      ?.slice(prefix.length) || ""
+  );
+}
+
+function buildHeaders(options?: RequestInit): Headers {
+  const headers = new Headers(options?.headers);
+  const method = (options?.method || "GET").toUpperCase();
+  if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
+    const csrfToken = readCookie(CSRF_COOKIE_NAME);
+    if (csrfToken) {
+      headers.set(CSRF_HEADER_NAME, csrfToken);
+    }
+  }
+  return headers;
+}
 
 async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
   const url = `${API_BASE}${path}`;
   const res = await fetch(url, {
     credentials: "include",
     ...options,
+    headers: buildHeaders(options),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
@@ -29,7 +56,7 @@ export async function getActivity(): Promise<ActivitySettings> {
   return fetchApi("/activity");
 }
 
-export async function getTodayCheckin(studentId: string): Promise<DailyCheckin | null> {
+export async function getTodayCheckin(studentId: string): Promise<PublicDailyCheckin | null> {
   const query = new URLSearchParams({ student_id: studentId }).toString();
   return fetchApi(`/submissions/today?${query}`);
 }

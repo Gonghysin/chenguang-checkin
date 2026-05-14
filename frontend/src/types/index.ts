@@ -20,14 +20,15 @@ export interface ActivitySettings {
 export interface CheckinAttachment {
   id: string;
   item_type: CheckinItemType;
-  file_name: string;
+  file_name?: string;
+  display_name?: string;
   file_size: number;
   file_type: string;
   uploaded_at: string;
 }
 
 export interface CheckinItem {
-  id: string;
+  id?: string;
   item_type: CheckinItemType;
   is_valid: boolean;
   points: number;
@@ -58,8 +59,20 @@ export interface DailyCheckin {
   items: CheckinItem[];
 }
 
+export interface PublicDailyCheckin {
+  checkin_date: string;
+  first_submitted_at: string;
+  first_valid_at: string | null;
+  earned_morning_bonus: boolean;
+  base_points: number;
+  total_points: number;
+  total_volume: number;
+  updated_at: string;
+  items: CheckinItem[];
+}
+
 export interface SubmissionResult {
-  checkin: DailyCheckin;
+  checkin: PublicDailyCheckin;
   message: string;
 }
 
@@ -97,7 +110,7 @@ export interface PublicRanking {
 }
 
 export interface PublicUserStats extends PublicRanking {
-  latest_checkin: DailyCheckin | null;
+  latest_checkin: PublicDailyCheckin | null;
 }
 
 export interface AdminParticipantSummary {

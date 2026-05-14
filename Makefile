@@ -1,6 +1,6 @@
 PORTS ?= 8000 5173 5174
 
-.PHONY: help clear-ports dev bootstrap setup deploy start nohup rolling-update nohup-stop nohup-status nohup-logs update stop restart status logs backend-logs set-admin configure-oss build-frontend sync-backend seed-admin
+.PHONY: help clear-ports dev bootstrap setup deploy start nohup rolling-update nohup-stop nohup-status nohup-logs update stop restart status logs backend-logs set-admin configure-oss configure-security build-frontend sync-backend seed-admin
 
 help:
 	@echo "可用命令:"
@@ -14,6 +14,7 @@ help:
 	@echo "  make nohup-status                查看 nohup 服务状态"
 	@echo "  make nohup-logs                  查看 nohup 服务日志"
 	@echo "  make configure-oss               交互式配置 Sealos 对象存储到 backend/.env"
+	@echo "  make configure-security          生成生产安全配置并写入 backend/.env"
 	@echo "  make deploy BACKEND_URL=<url>    一键安装依赖、构建前端、初始化后端并用 PM2 启动"
 	@echo "  make start BACKEND_URL=<url>     构建并启动前后端 PM2 服务"
 	@echo "  make update BACKEND_URL=<url>    拉取代码、重建前端、同步后端依赖并重启"
@@ -113,6 +114,9 @@ set-admin:
 
 configure-oss:
 	@bash ./scripts/configure_oss.sh
+
+configure-security:
+	@bash ./scripts/configure_security.sh
 
 build-frontend:
 	@bash -lc '. ./scripts/deploy_common.sh && if [ -f "$$FRONTEND_DIR/package-lock.json" ]; then run_project_step "安装前端依赖" "$$FRONTEND_DIR" "npm ci"; else run_project_step "安装前端依赖" "$$FRONTEND_DIR" "npm install"; fi && run_project_step "构建前端" "$$FRONTEND_DIR" "npm run build"'

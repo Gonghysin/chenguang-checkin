@@ -79,6 +79,47 @@ class SubmissionResult(BaseModel):
     message: str
 
 
+class PublicCheckinAttachmentOut(BaseModel):
+    id: str
+    item_type: str
+    display_name: str
+    file_size: int
+    file_type: str
+    uploaded_at: datetime
+
+
+class PublicCheckinItemOut(BaseModel):
+    item_type: str
+    is_valid: bool
+    points: int
+    volume_score: float
+    listening_questions: Optional[int] = None
+    reading_articles: Optional[int] = None
+    reading_questions: Optional[int] = None
+    writing_words: Optional[int] = None
+    vocabulary_words: Optional[int] = None
+    running_distance_km: Optional[float] = None
+    running_pace_min_per_km: Optional[float] = None
+    attachments: list[PublicCheckinAttachmentOut] = Field(default_factory=list)
+
+
+class PublicDailyCheckinOut(BaseModel):
+    checkin_date: date
+    first_submitted_at: datetime
+    first_valid_at: Optional[datetime] = None
+    earned_morning_bonus: bool
+    base_points: int
+    total_points: int
+    total_volume: float
+    updated_at: datetime
+    items: list[PublicCheckinItemOut] = Field(default_factory=list)
+
+
+class PublicSubmissionResult(BaseModel):
+    checkin: PublicDailyCheckinOut
+    message: str
+
+
 class AdminLogin(BaseModel):
     username: str
     password: str
@@ -126,7 +167,7 @@ class PublicRankingOut(BaseModel):
 
 
 class PublicUserStatsOut(PublicRankingOut):
-    latest_checkin: Optional[DailyCheckinOut] = None
+    latest_checkin: Optional[PublicDailyCheckinOut] = None
 
 
 class AdminParticipantSummary(BaseModel):

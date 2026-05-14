@@ -110,6 +110,20 @@ make configure-oss
 
 该命令会交互询问 Access Key、Secret Key、Internal endpoint、External endpoint 和桶名称，并写入本机 `backend/.env`。不要把真实密钥写入 `.env.example` 或提交到 Git。
 
+配置生产安全项：
+
+```bash
+make configure-security
+```
+
+该命令会自动生成随机 `ADMIN_SESSION_SECRET`，并把 `ENVIRONMENT=production`、上传大小限制和单次上传文件数限制写入 `backend/.env`。每次运行都会轮换管理员会话密钥，现有管理员登录会失效；通常首次上线或需要主动轮换密钥时运行即可，滚动更新前不需要每次执行。
+
+可通过环境变量调整上传限制：
+
+```bash
+UPLOAD_MAX_FILE_SIZE_MB=12 UPLOAD_MAX_FILES_PER_SUBMISSION=15 make configure-security
+```
+
 `make nohup` 会交互询问两个公网地址：
 
 - 后端公网地址：Sealos 中 8000 端口对应的公网地址，例如 `https://api.example.sealoszh.site`

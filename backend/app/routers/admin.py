@@ -1,10 +1,12 @@
+import time
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Response, Depends, HTTPException, Query
+from fastapi import APIRouter, Response, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, asc, func
 from sqlalchemy.orm import selectinload
 
+from app.config import settings
 from app.database import get_db
 from app.models import Admin, CheckinAttachment, CheckinItem, DailyCheckin
 from app.schemas import (
@@ -20,35 +22,94 @@ from app.schemas import (
 from app.services.activity import build_activity_response, get_or_create_activity_settings
 from app.services.auth import verify_password
 from app.services.rankings import build_ranking_rows
-from app.services.session import create_session_cookie, get_current_admin_username, COOKIE_NAME
+from app.services.session import (
+    COOKIE_NAME,
+    CSRF_COOKIE_NAME,
+    create_csrf_token,
+    create_session_cookie,
+    get_current_admin_username,
+    require_admin_csrf,
+)
 from app.services.oss import get_oss_client
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 ITEM_ORDER = ["listening", "reading", "writing", "vocabulary", "running"]
+LOGIN_FAILURES: dict[str, dict[str, float | int]] = {}
+
+
+def _login_rate_key(request: Request, username: str) -> str:
+    client_host = request.client.host if request.client else "-"
+    return f"{client_host}:{username.strip().lower()}"
+
+
+def _check_login_rate_limit(key: str) -> None:
+    now = time.monotonic()
+    failure = LOGIN_FAILURES.get(key)
+    if not failure:
+        return
+
+    locked_until = float(failure.get("locked_until", 0))
+    if locked_until > now:
+        raise HTTPException(status_code=429, detail="登录失败次数过多，请稍后再试")
+
+    first_failed_at = float(failure.get("first_failed_at", now))
+    if now - first_failed_at > settings.admin_login_window_seconds:
+        LOGIN_FAILURES.pop(key, None)
+
+
+def _record_login_failure(key: str) -> None:
+    now = time.monotonic()
+    failure = LOGIN_FAILURES.get(key)
+    if (
+        not failure
+        or now - float(failure.get("first_failed_at", now)) > settings.admin_login_window_seconds
+    ):
+        failure = {"count": 0, "first_failed_at": now, "locked_until": 0}
+
+    failure["count"] = int(failure.get("count", 0)) + 1
+    if int(failure["count"]) >= settings.admin_login_max_attempts:
+        failure["locked_until"] = now + settings.admin_login_lockout_seconds
+    LOGIN_FAILURES[key] = failure
 
 
 @router.post("/login")
 async def admin_login(
     payload: AdminLogin,
     response: Response,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
+    rate_key = _login_rate_key(request, payload.username)
+    _check_login_rate_limit(rate_key)
+
     result = await db.execute(select(Admin).where(Admin.username == payload.username))
     admin = result.scalar_one_or_none()
 
     if not admin:
+        _record_login_failure(rate_key)
         raise HTTPException(status_code=401, detail="用户名或密码错误")
 
     if not await verify_password(payload.password, admin.password_hash):
+        _record_login_failure(rate_key)
         raise HTTPException(status_code=401, detail="用户名或密码错误")
 
-    cookie = create_session_cookie(admin.username)
+    LOGIN_FAILURES.pop(rate_key, None)
+    csrf_token = create_csrf_token()
+    cookie = create_session_cookie(admin.username, csrf_token)
     response.set_cookie(
         key=COOKIE_NAME,
         value=cookie,
         httponly=True,
-        secure=False,
+        secure=settings.effective_admin_cookie_secure,
+        samesite="lax",
+        max_age=86400,
+    )
+    response.set_cookie(
+        key=CSRF_COOKIE_NAME,
+        value=csrf_token,
+        httponly=False,
+        secure=settings.effective_admin_cookie_secure,
         samesite="lax",
         max_age=86400,
     )
@@ -56,8 +117,22 @@ async def admin_login(
 
 
 @router.post("/logout")
-async def admin_logout(response: Response):
-    response.delete_cookie(key=COOKIE_NAME)
+async def admin_logout(
+    response: Response,
+    _: str = Depends(require_admin_csrf),
+):
+    response.delete_cookie(
+        key=COOKIE_NAME,
+        httponly=True,
+        secure=settings.effective_admin_cookie_secure,
+        samesite="lax",
+    )
+    response.delete_cookie(
+        key=CSRF_COOKIE_NAME,
+        httponly=False,
+        secure=settings.effective_admin_cookie_secure,
+        samesite="lax",
+    )
     return {"success": True}
 
 
@@ -257,7 +332,7 @@ async def get_admin_activity(
 @router.put("/activity", response_model=ActivitySettingsOut)
 async def update_admin_activity(
     payload: ActivitySettingsUpdate,
-    _: str = Depends(get_current_admin_username),
+    _: str = Depends(require_admin_csrf),
     db: AsyncSession = Depends(get_db),
 ):
     if not payload.name.strip():
@@ -304,7 +379,7 @@ async def download_attachment(
 @router.delete("/submissions/{submission_id}")
 async def delete_submission(
     submission_id: str,
-    _: str = Depends(get_current_admin_username),
+    _: str = Depends(require_admin_csrf),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(

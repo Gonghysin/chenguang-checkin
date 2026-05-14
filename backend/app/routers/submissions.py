@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
+from app.config import settings
 from app.database import get_db
 from app.models import CheckinAttachment, CheckinItem, DailyCheckin
 from app.services.oss import get_oss_client
@@ -22,7 +23,13 @@ from app.services.activity import (
     is_within_checkin_window,
 )
 from app.services.rankings import build_ranking_rows, public_ranking_payload
-from app.schemas import ActivitySettingsOut, DailyCheckinOut, PublicRankingOut, PublicUserStatsOut, SubmissionResult
+from app.schemas import (
+    ActivitySettingsOut,
+    PublicDailyCheckinOut,
+    PublicRankingOut,
+    PublicSubmissionResult,
+    PublicUserStatsOut,
+)
 
 router = APIRouter(tags=["submissions"])
 logger = logging.getLogger(__name__)
@@ -38,6 +45,12 @@ ITEM_LABELS = {
     "vocabulary": "背单词",
     "running": "跑步",
 }
+ALLOWED_UPLOAD_TYPES = {
+    "image/jpeg": {".jpg", ".jpeg"},
+    "image/png": {".png"},
+    "image/webp": {".webp"},
+    "application/pdf": {".pdf"},
+}
 
 
 @router.get("/api/activity", response_model=ActivitySettingsOut)
@@ -47,7 +60,7 @@ async def get_activity(db: AsyncSession = Depends(get_db)):
     return build_activity_response(settings)
 
 
-@router.get("/api/submissions/today", response_model=DailyCheckinOut | None)
+@router.get("/api/submissions/today", response_model=PublicDailyCheckinOut | None)
 async def get_today_submission(
     student_id: str = Query(...),
     db: AsyncSession = Depends(get_db),
@@ -69,7 +82,7 @@ async def get_today_submission(
         return None
 
     checkin.items.sort(key=lambda item: list(ITEM_LABELS).index(item.item_type))
-    return DailyCheckinOut.model_validate(checkin)
+    return _build_public_checkin(checkin)
 
 
 @router.get("/api/rankings", response_model=list[PublicRankingOut])
@@ -120,7 +133,7 @@ async def get_my_stats(
     summary = public_ranking_payload(rows[0])
     latest = max(checkins, key=lambda checkin: checkin.checkin_date)
     latest.items.sort(key=lambda item: list(ITEM_LABELS).index(item.item_type))
-    return PublicUserStatsOut(**summary, latest_checkin=DailyCheckinOut.model_validate(latest))
+    return PublicUserStatsOut(**summary, latest_checkin=_build_public_checkin(latest))
 
 
 @router.get("/api/submissions/attachments/{attachment_id}/download")
@@ -150,7 +163,7 @@ async def download_my_attachment(
     return {"download_url": get_oss_client().get_presigned_url(attachment.oss_key, expire=3600)}
 
 
-@router.post("/api/submissions", response_model=SubmissionResult, status_code=status.HTTP_201_CREATED)
+@router.post("/api/submissions", response_model=PublicSubmissionResult, status_code=status.HTTP_201_CREATED)
 async def create_submission(
     request: Request,
     name: str = Form(...),
@@ -268,8 +281,48 @@ async def create_submission(
         saved.total_points,
     )
     return {
-        "checkin": DailyCheckinOut.model_validate(saved),
+        "checkin": _build_public_checkin(saved),
         "message": "打卡已保存",
+    }
+
+
+def _build_public_checkin(checkin: DailyCheckin) -> dict[str, Any]:
+    return {
+        "checkin_date": checkin.checkin_date,
+        "first_submitted_at": checkin.first_submitted_at,
+        "first_valid_at": checkin.first_valid_at,
+        "earned_morning_bonus": checkin.earned_morning_bonus,
+        "base_points": checkin.base_points,
+        "total_points": checkin.total_points,
+        "total_volume": checkin.total_volume,
+        "updated_at": checkin.updated_at,
+        "items": [
+            {
+                "item_type": item.item_type,
+                "is_valid": item.is_valid,
+                "points": item.points,
+                "volume_score": item.volume_score,
+                "listening_questions": item.listening_questions,
+                "reading_articles": item.reading_articles,
+                "reading_questions": item.reading_questions,
+                "writing_words": item.writing_words,
+                "vocabulary_words": item.vocabulary_words,
+                "running_distance_km": item.running_distance_km,
+                "running_pace_min_per_km": item.running_pace_min_per_km,
+                "attachments": [
+                    {
+                        "id": attachment.id,
+                        "item_type": attachment.item_type,
+                        "display_name": f"{ITEM_LABELS.get(attachment.item_type, '附件')}截图",
+                        "file_size": attachment.file_size,
+                        "file_type": attachment.file_type,
+                        "uploaded_at": attachment.uploaded_at,
+                    }
+                    for attachment in item.attachments
+                ],
+            }
+            for item in checkin.items
+        ],
     }
 
 
@@ -301,6 +354,11 @@ def _validate_attachments(
 ) -> None:
     if len(attachment_item_types) != len(attachments):
         raise HTTPException(status_code=400, detail="附件和项目类型数量不匹配")
+    if len(attachments) > settings.upload_max_files_per_submission:
+        raise HTTPException(
+            status_code=400,
+            detail=f"单次最多上传 {settings.upload_max_files_per_submission} 个附件",
+        )
 
     attached_types = set()
     for item_type, attachment in zip(attachment_item_types, attachments):
@@ -398,12 +456,13 @@ async def _store_attachments(
         item = item_by_type[item_type]
         next_index = existing_attachment_counts.get(item_type, 0) + 1
         existing_attachment_counts[item_type] = next_index
+        file_bytes, detected_content_type = await _read_validated_attachment(attachment)
         formatted_filename = _format_attachment_filename(
             checkin,
             item_type,
             next_index,
             attachment.filename or "attachment",
-            attachment.content_type,
+            detected_content_type,
         )
         object_key = _format_attachment_object_key(checkin, item_type, next_index, formatted_filename)
         logger.info(
@@ -411,11 +470,8 @@ async def _store_attachments(
             item_type,
             attachment.filename,
             formatted_filename,
-            attachment.content_type,
+            detected_content_type,
         )
-        file_bytes = await attachment.read()
-        if not file_bytes:
-            raise HTTPException(status_code=400, detail=f"{attachment.filename} 是空文件")
 
         try:
             upload_result = get_oss_client().upload_file(
@@ -444,10 +500,43 @@ async def _store_attachments(
                 file_name=formatted_filename,
                 file_url=upload_result["file_url"],
                 file_size=len(file_bytes),
-                file_type=attachment.content_type or "application/octet-stream",
+                file_type=detected_content_type,
                 oss_key=upload_result["oss_key"],
             )
         )
+
+
+async def _read_validated_attachment(attachment: UploadFile) -> tuple[bytes, str]:
+    max_size = settings.upload_max_file_size_mb * 1024 * 1024
+    file_bytes = await attachment.read(max_size + 1)
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail=f"{attachment.filename} 是空文件")
+    if len(file_bytes) > max_size:
+        raise HTTPException(
+            status_code=413,
+            detail=f"{attachment.filename} 超过 {settings.upload_max_file_size_mb} MB 限制",
+        )
+
+    detected_content_type = _detect_content_type(file_bytes)
+    if detected_content_type not in ALLOWED_UPLOAD_TYPES:
+        raise HTTPException(status_code=400, detail=f"{attachment.filename} 文件类型不支持")
+
+    ext = _file_extension(attachment.filename or "", None)
+    if ext not in ALLOWED_UPLOAD_TYPES[detected_content_type]:
+        raise HTTPException(status_code=400, detail=f"{attachment.filename} 扩展名和文件内容不匹配")
+    return file_bytes, detected_content_type
+
+
+def _detect_content_type(file_bytes: bytes) -> str:
+    if file_bytes.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if file_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if len(file_bytes) >= 12 and file_bytes[:4] == b"RIFF" and file_bytes[8:12] == b"WEBP":
+        return "image/webp"
+    if file_bytes.startswith(b"%PDF-"):
+        return "application/pdf"
+    return "application/octet-stream"
 
 
 def _format_attachment_filename(

@@ -238,7 +238,7 @@ export default function SubmitForm() {
       try {
         const res = await getMyAttachmentDownloadUrl(attachment.id, trimmedStudentId);
         setPreviewUrl(res.download_url);
-        setPreviewTitle(attachment.file_name);
+        setPreviewTitle(attachment.display_name || attachment.file_name || "打卡截图");
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "附件打开失败");
       }
