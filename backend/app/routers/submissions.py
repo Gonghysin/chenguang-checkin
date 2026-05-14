@@ -51,6 +51,12 @@ ALLOWED_UPLOAD_TYPES = {
     "image/webp": {".webp"},
     "application/pdf": {".pdf"},
 }
+UPLOAD_EXTENSION_BY_TYPE = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "application/pdf": ".pdf",
+}
 
 
 @router.get("/api/activity", response_model=ActivitySettingsOut)
@@ -520,10 +526,6 @@ async def _read_validated_attachment(attachment: UploadFile) -> tuple[bytes, str
     detected_content_type = _detect_content_type(file_bytes)
     if detected_content_type not in ALLOWED_UPLOAD_TYPES:
         raise HTTPException(status_code=400, detail=f"{attachment.filename} 文件类型不支持")
-
-    ext = _file_extension(attachment.filename or "", None)
-    if ext not in ALLOWED_UPLOAD_TYPES[detected_content_type]:
-        raise HTTPException(status_code=400, detail=f"{attachment.filename} 扩展名和文件内容不匹配")
     return file_bytes, detected_content_type
 
 
@@ -567,6 +569,9 @@ def _format_attachment_object_key(
 
 
 def _file_extension(filename: str, content_type: str | None) -> str:
+    if content_type in UPLOAD_EXTENSION_BY_TYPE:
+        return UPLOAD_EXTENSION_BY_TYPE[content_type]
+
     if "." in filename:
         raw_ext = filename.rsplit(".", 1)[-1].lower()
         safe_ext = re.sub(r"[^a-z0-9]", "", raw_ext)
