@@ -17,6 +17,11 @@ if ! project_shell "$PROJECT_DIR" "git remote get-url $(shell_quote "$REMOTE") >
     fi
 fi
 
+if ! project_shell "$PROJECT_DIR" "git diff --quiet -- backend/uv.lock" || ! project_shell "$PROJECT_DIR" "git diff --cached --quiet -- backend/uv.lock"; then
+    echo "检测到 backend/uv.lock 存在部署产生的本地改动，已自动恢复。"
+    project_shell "$PROJECT_DIR" "git restore --staged --worktree -- backend/uv.lock"
+fi
+
 if ! project_shell "$PROJECT_DIR" "git diff --quiet" || ! project_shell "$PROJECT_DIR" "git diff --cached --quiet"; then
     echo "错误: 当前工作区存在未提交的跟踪文件改动，已停止更新。"
     echo "请先提交、暂存或丢弃这些改动后再运行 make rolling-update。"
