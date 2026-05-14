@@ -1,12 +1,9 @@
 #!/bin/bash
 set -e
 
-if ! command -v uv >/dev/null 2>&1 && [ -f "$HOME/.local/bin/env" ]; then
-    . "$HOME/.local/bin/env"
-fi
-
-PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-BACKEND_DIR="$PROJECT_DIR/backend"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=deploy_common.sh
+. "$SCRIPT_DIR/deploy_common.sh"
 
 printf "管理员用户名: "
 read -r ADMIN_USERNAME_INPUT
@@ -27,6 +24,5 @@ if [ -z "$ADMIN_PASSWORD_INPUT" ]; then
     exit 1
 fi
 
-cd "$BACKEND_DIR"
-ADMIN_USERNAME="$ADMIN_USERNAME_INPUT" ADMIN_PASSWORD="$ADMIN_PASSWORD_INPUT" uv run python scripts/seed_admin.py
+run_project_step "写入管理员账号" "$BACKEND_DIR" "ADMIN_USERNAME=$(shell_quote "$ADMIN_USERNAME_INPUT") ADMIN_PASSWORD=$(shell_quote "$ADMIN_PASSWORD_INPUT") uv run python scripts/seed_admin.py"
 echo "管理员账号已写入数据库"

@@ -1,8 +1,9 @@
 #!/bin/bash
 set -e
 
-PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-BACKEND_DIR="$PROJECT_DIR/backend"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=deploy_common.sh
+. "$SCRIPT_DIR/deploy_common.sh"
 ENV_FILE="$BACKEND_DIR/.env"
 
 set_env() {
@@ -90,6 +91,7 @@ set_env "OSS_INTERNAL_ENDPOINT" "$OSS_INTERNAL_ENDPOINT_INPUT"
 set_env "OSS_EXTERNAL_ENDPOINT" "$OSS_EXTERNAL_ENDPOINT_INPUT"
 set_env "OSS_BUCKET_NAME" "$OSS_BUCKET_NAME_INPUT"
 set_env "OSS_REGION" "us-east-1"
+chown_to_project_user "$ENV_FILE"
 
 echo ""
 echo "Sealos 对象存储配置已写入 backend/.env"

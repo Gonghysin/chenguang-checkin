@@ -7,6 +7,7 @@ help:
 	@echo "  make clear-ports                 清空默认端口: $(PORTS)"
 	@echo "  make dev                         本地一键启动后端 8000 和前端 5173"
 	@echo "  make bootstrap                   Ubuntu 空环境安装系统依赖、uv、Node、前后端依赖"
+	@echo "  make setup                       仅安装依赖并初始化数据库，不启动服务"
 	@echo "  make nohup                       交互填写公网地址，用 nohup 启动后端 8000 和前端 5173"
 	@echo "  make rolling-update              拉取远程 main，重新构建并重启 nohup 服务"
 	@echo "  make nohup-stop                  停止 nohup 启动的服务"
@@ -22,6 +23,9 @@ help:
 	@echo "  make logs                        查看 PM2 日志"
 	@echo "  make backend-logs                实时查看后端应用日志"
 	@echo "  make set-admin                   交互式设置管理员账号密码"
+	@echo "  make build-frontend              安装前端依赖并构建 dist"
+	@echo "  make sync-backend                同步后端 uv 依赖"
+	@echo "  make seed-admin                  使用环境变量初始化管理员账号"
 
 clear-ports:
 	@for port in $(PORTS); do \
@@ -111,10 +115,10 @@ configure-oss:
 	@bash ./scripts/configure_oss.sh
 
 build-frontend:
-	@cd frontend && npm install && npm run build
+	@bash -lc '. ./scripts/deploy_common.sh && if [ -f "$$FRONTEND_DIR/package-lock.json" ]; then run_project_step "安装前端依赖" "$$FRONTEND_DIR" "npm ci"; else run_project_step "安装前端依赖" "$$FRONTEND_DIR" "npm install"; fi && run_project_step "构建前端" "$$FRONTEND_DIR" "npm run build"'
 
 sync-backend:
-	@cd backend && if ! command -v uv >/dev/null 2>&1 && [ -f "$$HOME/.local/bin/env" ]; then . "$$HOME/.local/bin/env"; fi; uv sync
+	@bash -lc '. ./scripts/deploy_common.sh && run_project_step "同步后端依赖" "$$BACKEND_DIR" "uv sync"'
 
 seed-admin:
-	@cd backend && if ! command -v uv >/dev/null 2>&1 && [ -f "$$HOME/.local/bin/env" ]; then . "$$HOME/.local/bin/env"; fi; uv run python scripts/seed_admin.py
+	@bash -lc '. ./scripts/deploy_common.sh && run_project_step "初始化管理员账号" "$$BACKEND_DIR" "uv run python scripts/seed_admin.py"'

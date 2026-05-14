@@ -1,11 +1,9 @@
 #!/bin/bash
 set -e
 
-if ! command -v uv >/dev/null 2>&1 && [ -f "$HOME/.local/bin/env" ]; then
-    . "$HOME/.local/bin/env"
-fi
-
-PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=deploy_common.sh
+. "$SCRIPT_DIR/deploy_common.sh"
 cd "$PROJECT_DIR"
 
 echo "================================"
@@ -28,23 +26,21 @@ case "$API_BASE" in
     *) API_BASE="$API_BASE/api" ;;
 esac
 
-echo "[1/4] 拉取最新代码..."
+echo "[1/5] 拉取最新代码..."
 git pull origin main
 
-echo "[2/4] 构建前端..."
-cd frontend
-npm install
-VITE_API_BASE="$API_BASE" npm run build
-cd ..
+if [ -f "$FRONTEND_DIR/package-lock.json" ]; then
+    run_project_step "[2/5] 安装前端依赖..." "$FRONTEND_DIR" "npm ci"
+else
+    run_project_step "[2/5] 安装前端依赖..." "$FRONTEND_DIR" "npm install"
+fi
+run_project_step "[3/5] 构建前端..." "$FRONTEND_DIR" "VITE_API_BASE=$(shell_quote "$API_BASE") npm run build"
 
-echo "[3/4] 更新后端依赖..."
-cd backend
-uv sync
-cd ..
+run_project_step "[4/5] 更新后端依赖..." "$BACKEND_DIR" "uv sync"
 
-echo "[4/4] 重启服务..."
-pm2 restart ecosystem.config.js
+echo "[5/5] 重启服务..."
+run_pm2 restart ecosystem.config.js
 
 echo ""
 echo "更新完成"
-pm2 status
+run_pm2 status

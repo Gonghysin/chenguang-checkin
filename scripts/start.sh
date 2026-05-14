@@ -1,19 +1,19 @@
 #!/bin/bash
 set -e
 
-if ! command -v uv >/dev/null 2>&1 && [ -f "$HOME/.local/bin/env" ]; then
-    . "$HOME/.local/bin/env"
-fi
-
 # 晨光打卡 - 公网服务启动脚本
 # 用法: BACKEND_URL=http://api.example.com ./scripts/start.sh
 
-PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=deploy_common.sh
+. "$SCRIPT_DIR/deploy_common.sh"
 cd "$PROJECT_DIR"
 
 echo "================================"
 echo " 晨光打卡 - 公网部署启动"
 echo "================================"
+echo ""
+print_runtime_context
 echo ""
 
 if [ -z "$BACKEND_URL" ]; then
@@ -44,53 +44,48 @@ if [ ! -f backend/.env ]; then
     exit 1
 fi
 
-if ! command -v pm2 &> /dev/null; then
+if ! project_command_exists pm2; then
     echo "[1/6] 安装 pm2 进程管理器..."
     if ! command -v npm &> /dev/null; then
         echo "错误: npm 未安装，请先运行 make setup 配置环境"
         exit 1
     fi
-    sudo npm install -g pm2
+    $SUDO npm install -g pm2
 fi
 
-if ! pm2 list | grep -q "pm2-logrotate"; then
+if ! run_pm2 list | grep -q "pm2-logrotate"; then
     echo "[2/6] 安装 pm2-logrotate 日志轮转..."
-    if pm2 install pm2-logrotate; then
-        pm2 set pm2-logrotate:max_size 100M
-        pm2 set pm2-logrotate:retain 10
+    if run_pm2 install pm2-logrotate; then
+        run_pm2 set pm2-logrotate:max_size 100M
+        run_pm2 set pm2-logrotate:retain 10
     else
         echo "警告: pm2-logrotate 安装失败，跳过日志轮转配置，不影响服务启动"
         echo "如需修复 npm 缓存权限，可执行: sudo chown -R $(id -u):$(id -g) \"$HOME/.npm\""
     fi
 fi
 
-echo "[3/6] 构建前端（生产环境）..."
-cd frontend
-npm install
-VITE_API_BASE="$API_BASE" npm run build
-cd ..
+if [ -f "$FRONTEND_DIR/package-lock.json" ]; then
+    run_project_step "[3/6] 安装前端依赖..." "$FRONTEND_DIR" "npm ci"
+else
+    run_project_step "[3/6] 安装前端依赖..." "$FRONTEND_DIR" "npm install"
+fi
+run_project_step "[4/6] 构建前端（生产环境）..." "$FRONTEND_DIR" "VITE_API_BASE=$(shell_quote "$API_BASE") npm run build"
 
-echo "[4/6] 检查后端依赖..."
-cd backend
-uv sync
-cd ..
+run_project_step "[5/6] 检查后端依赖..." "$BACKEND_DIR" "uv sync"
 
-echo "[5/6] 初始化数据库..."
-cd backend
-uv run python scripts/seed_admin.py
-cd ..
+run_project_step "[6/6] 初始化数据库..." "$BACKEND_DIR" "uv run python scripts/seed_admin.py"
 
-mkdir -p logs
+ensure_log_dir
 
-echo "[6/6] 启动服务..."
-pm2 start ecosystem.config.js
+echo "[启动] 启动服务..."
+run_pm2 start ecosystem.config.js
 
 echo ""
 echo "================================"
 echo " 部署完成"
 echo "================================"
 echo ""
-pm2 status
+run_pm2 status
 echo ""
 echo "访问地址:"
 echo "  前端: http://<前端域名>:5174"

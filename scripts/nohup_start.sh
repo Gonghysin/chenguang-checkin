@@ -1,14 +1,9 @@
 #!/bin/bash
 set -e
 
-if ! command -v uv >/dev/null 2>&1 && [ -f "$HOME/.local/bin/env" ]; then
-    . "$HOME/.local/bin/env"
-fi
-
-PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-BACKEND_DIR="$PROJECT_DIR/backend"
-FRONTEND_DIR="$PROJECT_DIR/frontend"
-LOG_DIR="$PROJECT_DIR/logs"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=deploy_common.sh
+. "$SCRIPT_DIR/deploy_common.sh"
 BACKEND_PID="$LOG_DIR/backend.pid"
 FRONTEND_PID="$LOG_DIR/frontend.pid"
 NOHUP_ENV="$LOG_DIR/nohup.env"
@@ -60,6 +55,7 @@ case "${1:-start}" in
 esac
 
 mkdir -p "$LOG_DIR"
+chown_to_project_user "$LOG_DIR"
 
 if [ ! -f "$BACKEND_DIR/.env" ]; then
     echo "错误: backend/.env 不存在。请先运行 make bootstrap，并配置 Sealos 对象存储。"
@@ -87,6 +83,7 @@ fi
     printf 'BACKEND_PORT=%q\n' "$BACKEND_PORT"
     printf 'FRONTEND_PORT=%q\n' "$FRONTEND_PORT"
 } > "$NOHUP_ENV"
+chown_to_project_user "$NOHUP_ENV"
 
 API_BASE="${BACKEND_URL%/}"
 case "$API_BASE" in
@@ -97,6 +94,7 @@ esac
 echo "================================"
 echo " 晨光打卡 - nohup 部署启动"
 echo "================================"
+print_runtime_context
 echo "后端端口: $BACKEND_PORT"
 echo "前端端口: $FRONTEND_PORT"
 echo "后端公网: ${BACKEND_URL%/}"
@@ -104,30 +102,24 @@ echo "前端公网: ${FRONTEND_URL%/}"
 echo "前端 API: $API_BASE"
 echo ""
 
-echo "[1/5] 构建前端..."
-cd "$FRONTEND_DIR"
-npm install
-VITE_API_BASE="$API_BASE" npm run build
+if [ -f "$FRONTEND_DIR/package-lock.json" ]; then
+    run_project_step "[1/6] 安装前端依赖..." "$FRONTEND_DIR" "npm ci"
+else
+    run_project_step "[1/6] 安装前端依赖..." "$FRONTEND_DIR" "npm install"
+fi
+run_project_step "[2/6] 构建前端..." "$FRONTEND_DIR" "VITE_API_BASE=$(shell_quote "$API_BASE") npm run build"
 
-echo "[2/5] 同步后端依赖..."
-cd "$BACKEND_DIR"
-uv sync
+run_project_step "[3/6] 同步后端依赖..." "$BACKEND_DIR" "uv sync"
 
-echo "[3/5] 初始化数据库..."
-uv run python scripts/seed_admin.py
+run_project_step "[4/6] 初始化数据库..." "$BACKEND_DIR" "uv run python scripts/seed_admin.py"
 
-echo "[4/5] 停止旧 nohup 服务..."
+echo "[5/6] 停止旧 nohup 服务..."
 stop_service frontend "$FRONTEND_PID"
 stop_service backend "$BACKEND_PID"
 
-echo "[5/5] 启动服务..."
-cd "$BACKEND_DIR"
-nohup env FRONTEND_URL="${FRONTEND_URL%/}" uv run uvicorn app.main:app --host 0.0.0.0 --port "$BACKEND_PORT" > "$LOG_DIR/backend-nohup.log" 2>&1 &
-echo $! > "$BACKEND_PID"
-
-cd "$FRONTEND_DIR"
-nohup npx --yes serve -s dist -l "tcp://0.0.0.0:$FRONTEND_PORT" > "$LOG_DIR/frontend-nohup.log" 2>&1 &
-echo $! > "$FRONTEND_PID"
+echo "[6/6] 启动服务..."
+start_project_nohup "    启动后端" "$BACKEND_DIR" "env FRONTEND_URL=$(shell_quote "${FRONTEND_URL%/}") uv run uvicorn app.main:app --host 0.0.0.0 --port $(shell_quote "$BACKEND_PORT")" "$LOG_DIR/backend-nohup.log" "$BACKEND_PID"
+start_project_nohup "    启动前端" "$FRONTEND_DIR" "npx --yes serve -s dist -l $(shell_quote "tcp://0.0.0.0:$FRONTEND_PORT")" "$LOG_DIR/frontend-nohup.log" "$FRONTEND_PID"
 
 echo ""
 show_status

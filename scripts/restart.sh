@@ -1,9 +1,10 @@
 #!/bin/bash
 set -e
 
-PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$PROJECT_DIR"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=deploy_common.sh
+. "$SCRIPT_DIR/deploy_common.sh"
 
-pm2 restart ecosystem.config.js
+run_pm2 restart ecosystem.config.js
 echo "服务已重启"
-pm2 status
+run_pm2 status

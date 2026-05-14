@@ -1,20 +1,15 @@
 #!/bin/bash
 set -e
 
-if ! command -v uv >/dev/null 2>&1 && [ -f "$HOME/.local/bin/env" ]; then
-    . "$HOME/.local/bin/env"
-fi
-
-PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-LOG_DIR="$PROJECT_DIR/logs"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=deploy_common.sh
+. "$SCRIPT_DIR/deploy_common.sh"
 NOHUP_ENV="$LOG_DIR/nohup.env"
 REMOTE="${REMOTE:-origin}"
 BRANCH="${BRANCH:-main}"
 
-cd "$PROJECT_DIR"
-
-if ! git remote get-url "$REMOTE" >/dev/null 2>&1; then
-    if git remote get-url public-origin >/dev/null 2>&1; then
+if ! project_shell "$PROJECT_DIR" "git remote get-url $(shell_quote "$REMOTE") >/dev/null 2>&1"; then
+    if project_shell "$PROJECT_DIR" "git remote get-url public-origin >/dev/null 2>&1"; then
         REMOTE="public-origin"
     else
         echo "错误: 找不到 Git remote: $REMOTE"
@@ -22,7 +17,7 @@ if ! git remote get-url "$REMOTE" >/dev/null 2>&1; then
     fi
 fi
 
-if ! git diff --quiet || ! git diff --cached --quiet; then
+if ! project_shell "$PROJECT_DIR" "git diff --quiet" || ! project_shell "$PROJECT_DIR" "git diff --cached --quiet"; then
     echo "错误: 当前工作区存在未提交的跟踪文件改动，已停止更新。"
     echo "请先提交、暂存或丢弃这些改动后再运行 make rolling-update。"
     exit 1
@@ -50,7 +45,7 @@ echo "前端公网: ${FRONTEND_URL%/}"
 echo ""
 
 echo "[1/2] 拉取远程代码..."
-git pull --ff-only "$REMOTE" "$BRANCH"
+project_shell "$PROJECT_DIR" "git pull --ff-only $(shell_quote "$REMOTE") $(shell_quote "$BRANCH")"
 
 echo "[2/2] 重新构建并重启 nohup 服务..."
 BACKEND_URL="${BACKEND_URL%/}" FRONTEND_URL="${FRONTEND_URL%/}" BACKEND_PORT="${BACKEND_PORT:-8000}" FRONTEND_PORT="${FRONTEND_PORT:-5173}" bash "$PROJECT_DIR/scripts/nohup_start.sh"

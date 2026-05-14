@@ -1,13 +1,9 @@
 #!/bin/bash
 set -e
 
-if ! command -v uv >/dev/null 2>&1 && [ -f "$HOME/.local/bin/env" ]; then
-    . "$HOME/.local/bin/env"
-fi
-
-PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-BACKEND_DIR="$PROJECT_DIR/backend"
-FRONTEND_DIR="$PROJECT_DIR/frontend"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=deploy_common.sh
+. "$SCRIPT_DIR/deploy_common.sh"
 
 cleanup() {
     if [ -n "${BACKEND_PID:-}" ]; then
@@ -32,15 +28,17 @@ echo "================================"
 echo ""
 
 echo "[1/4] 同步后端依赖..."
-cd "$BACKEND_DIR"
-uv sync
+run_project_step "    uv sync" "$BACKEND_DIR" "uv sync"
 
 echo "[2/4] 初始化数据库和管理员..."
-uv run python scripts/seed_admin.py
+run_project_step "    seed_admin" "$BACKEND_DIR" "uv run python scripts/seed_admin.py"
 
 echo "[3/4] 安装前端依赖..."
-cd "$FRONTEND_DIR"
-npm install
+if [ -f "$FRONTEND_DIR/package-lock.json" ]; then
+    run_project_step "    npm ci" "$FRONTEND_DIR" "npm ci"
+else
+    run_project_step "    npm install" "$FRONTEND_DIR" "npm install"
+fi
 
 echo "[4/4] 启动服务..."
 mkdir -p "$PROJECT_DIR/logs"

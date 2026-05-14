@@ -64,11 +64,43 @@ Ubuntu/Sealos 空环境部署推荐流程：
 
 ```bash
 make bootstrap
+make configure-oss
 make set-admin
 make nohup
 ```
 
 `make bootstrap` 会安装系统依赖、Node.js 22、uv，并同步前后端依赖。首次运行会创建 `backend/.env`，需要在服务器上填入真实对象存储配置；该文件已被 `.gitignore` 排除，不会上传到 GitHub。
+
+Sealos Devbox 建议用普通 devbox 用户部署：
+
+```bash
+cd /path/to/chenguang-checkin
+make bootstrap
+```
+
+如果已经通过 `sudo -i` 切到了 root，也要先回到项目目录再执行命令：
+
+```bash
+cd /home/devbox/chenguang-checkin
+make bootstrap
+```
+
+脚本会自动识别项目目录的拥有者。即使从 root 执行，`uv sync`、`npm ci`、构建、nohup 和 PM2 运维命令也会切回项目用户运行，避免 `.venv`、`node_modules`、`logs` 变成 root 权限后 devbox 用户无法继续维护。只有 `apt-get` 和全局安装 PM2 这类系统级步骤会使用 sudo/root。
+
+依赖安装默认使用国内镜像：
+
+```bash
+UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple
+NPM_CONFIG_REGISTRY=https://registry.npmmirror.com
+```
+
+如需改回官方源，可以在命令前覆盖：
+
+```bash
+UV_DEFAULT_INDEX=https://pypi.org/simple NPM_CONFIG_REGISTRY=https://registry.npmjs.org make bootstrap
+```
+
+耗时步骤会显示当前步骤、执行用户、工作目录、日志文件和一个简单进度动画。若安装卡住，可以另开终端查看提示中的 `logs/deploy-*.log`。
 
 配置 Sealos 对象存储：
 

@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
-if ! command -v uv >/dev/null 2>&1 && [ -f "$HOME/.local/bin/env" ]; then
-    . "$HOME/.local/bin/env"
-fi
-cd "$(dirname "$0")/../backend"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=deploy_common.sh
+. "$SCRIPT_DIR/deploy_common.sh"
+cd "$BACKEND_DIR"
 exec uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
