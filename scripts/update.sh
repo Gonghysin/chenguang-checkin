@@ -36,7 +36,7 @@ else
 fi
 run_project_step "[3/5] 构建前端..." "$FRONTEND_DIR" "VITE_API_BASE=$(shell_quote "$API_BASE") npm run build"
 
-run_project_step "[4/5] 更新后端依赖..." "$BACKEND_DIR" "uv sync"
+run_project_step "[4/5] 更新后端依赖..." "$BACKEND_DIR" "uv sync --locked"
 
 echo "[5/5] 重启服务..."
 run_pm2 restart ecosystem.config.js

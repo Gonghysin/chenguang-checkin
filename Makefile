@@ -122,7 +122,7 @@ build-frontend:
 	@bash -lc '. ./scripts/deploy_common.sh && if [ -f "$$FRONTEND_DIR/package-lock.json" ]; then run_project_step "安装前端依赖" "$$FRONTEND_DIR" "npm ci"; else run_project_step "安装前端依赖" "$$FRONTEND_DIR" "npm install"; fi && run_project_step "构建前端" "$$FRONTEND_DIR" "npm run build"'
 
 sync-backend:
-	@bash -lc '. ./scripts/deploy_common.sh && run_project_step "同步后端依赖" "$$BACKEND_DIR" "uv sync"'
+	@bash -lc '. ./scripts/deploy_common.sh && run_project_step "同步后端依赖" "$$BACKEND_DIR" "uv sync --locked"'
 
 seed-admin:
 	@bash -lc '. ./scripts/deploy_common.sh && run_project_step "初始化管理员账号" "$$BACKEND_DIR" "uv run python scripts/seed_admin.py"'
