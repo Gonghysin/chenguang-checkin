@@ -61,6 +61,7 @@ const ITEM_META: Array<{
 const MAKEUP_CHECKIN_DATE = "2026-05-15";
 const MAKEUP_WINDOW_START = "2026-05-16";
 const MAKEUP_WINDOW_END = "2026-05-17";
+const MAKEUP_ITEM_TYPES: CheckinItemType[] = ["speaking"];
 
 const EMPTY_ITEM: ItemValues = {
   selected: false,
@@ -176,12 +177,13 @@ export default function SubmitForm() {
             return;
           }
 
+          const targetItems = filterItemsForTarget(checkin.items, checkinTarget);
           setTargetCheckin(checkin);
-          const submittedTypes = checkin.items.map((item) => item.item_type);
+          const submittedTypes = targetItems.map((item) => item.item_type);
           setLockedItemTypes(submittedTypes);
-          setSubmittedValidity(validityFromItems(checkin.items));
-          setItems((prev) => applyExistingCheckin(prev, checkin.items));
-          setExistingAttachments(attachmentsFromItems(checkin.items));
+          setSubmittedValidity(validityFromItems(targetItems));
+          setItems(applyExistingCheckin(initialItems(), targetItems));
+          setExistingAttachments(attachmentsFromItems(targetItems));
         })
         .catch(() => {
           setLockedItemTypes([]);
@@ -203,9 +205,16 @@ export default function SubmitForm() {
     setError("");
   }, [checkinTarget]);
 
+  const activeItemMeta = useMemo(
+    () =>
+      checkinTarget === "makeup"
+        ? ITEM_META.filter((item) => MAKEUP_ITEM_TYPES.includes(item.type))
+        : ITEM_META,
+    [checkinTarget]
+  );
   const selectedCount = useMemo(
-    () => ITEM_META.filter((item) => items[item.type].selected).length,
-    [items]
+    () => activeItemMeta.filter((item) => items[item.type].selected).length,
+    [activeItemMeta, items]
   );
   const todayCheckin = success?.checkin ?? targetCheckin ?? myStats?.latest_checkin ?? null;
   const targetLabel = checkinTarget === "makeup" ? "补打卡" : "今日";
@@ -300,7 +309,7 @@ export default function SubmitForm() {
       }
 
       const payload: Record<string, Record<string, string>> = {};
-      for (const meta of ITEM_META) {
+      for (const meta of activeItemMeta) {
         const item = items[meta.type];
         if (!item.selected) continue;
         if (!lockedItemTypes.includes(meta.type) && files[meta.type].length === 0) {
@@ -318,7 +327,7 @@ export default function SubmitForm() {
         formData.append("checkin_date", MAKEUP_CHECKIN_DATE);
       }
 
-      for (const meta of ITEM_META) {
+      for (const meta of activeItemMeta) {
         for (const file of files[meta.type]) {
           formData.append("attachment_item_types", meta.type);
           formData.append("attachments", file);
@@ -348,7 +357,7 @@ export default function SubmitForm() {
         setLoading(false);
       }
     },
-    [checkinTarget, files, items, lockedItemTypes, name, selectedCount, studentId]
+    [activeItemMeta, checkinTarget, files, items, lockedItemTypes, name, selectedCount, studentId]
   );
 
   return (
@@ -513,7 +522,7 @@ export default function SubmitForm() {
                 {earnedMorningBonus ? `${targetLabel}有早起加分` : `${targetLabel}暂无早起加分`}
               </span>
             </div>
-            {ITEM_META.map((meta) => (
+            {activeItemMeta.map((meta) => (
               <ProjectCard
                 key={meta.type}
                 meta={meta}
@@ -527,7 +536,7 @@ export default function SubmitForm() {
         </div>
 
         <div className="space-y-4">
-          {ITEM_META.map((meta) =>
+          {activeItemMeta.map((meta) =>
             items[meta.type].selected ? (
               <ItemSection
                 key={meta.type}
@@ -675,6 +684,11 @@ function formatLocalDate(value: Date) {
 
 function isDateInRange(value: string, start: string, end: string) {
   return value >= start && value <= end;
+}
+
+function filterItemsForTarget(items: CheckinItem[], target: CheckinTarget) {
+  if (target === "today") return items;
+  return items.filter((item) => MAKEUP_ITEM_TYPES.includes(item.item_type));
 }
 
 function attachmentsFromItems(items: CheckinItem[]): Record<CheckinItemType, CheckinAttachment[]> {

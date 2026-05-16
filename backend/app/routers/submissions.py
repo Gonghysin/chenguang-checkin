@@ -210,6 +210,8 @@ async def create_submission(
             detail=f"当前不在打卡有效时间内，本活动有效时间为 {checkin_window_label(activity)}",
         )
     target_date = _resolve_checkin_date(activity, now, checkin_date)
+    if is_makeup_submission:
+        _validate_makeup_submission(item_inputs, attachment_item_types or [])
 
     result = await db.execute(
         select(DailyCheckin)
@@ -385,6 +387,16 @@ def _is_makeup_date_allowed(today: date, requested_date: date | None) -> bool:
         requested_date == MAKEUP_CHECKIN_DATE
         and MAKEUP_WINDOW_START <= today <= MAKEUP_WINDOW_END
     )
+
+
+def _validate_makeup_submission(
+    item_inputs: dict[str, dict[str, Any]],
+    attachment_item_types: list[str],
+) -> None:
+    if set(item_inputs) != {"speaking"}:
+        raise HTTPException(status_code=400, detail="补打卡仅允许提交 2026-05-15 的口语项目")
+    if any(item_type != "speaking" for item_type in attachment_item_types):
+        raise HTTPException(status_code=400, detail="补打卡附件仅允许对应口语项目")
 
 
 def _validate_attachments(
