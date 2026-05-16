@@ -2,7 +2,7 @@ import json
 import logging
 import re
 import uuid
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -37,12 +37,18 @@ logger = logging.getLogger(__name__)
 CHINA_TZ = ZoneInfo("Asia/Shanghai")
 MORNING_START = time(6, 30, 0)
 MORNING_END = time(7, 40, 0)
+MAKEUP_CHECKIN_DATE = date(2026, 5, 15)
+MAKEUP_WINDOW_START = date(2026, 5, 16)
+MAKEUP_WINDOW_END = date(2026, 5, 17)
+MAX_BASE_POINTS = 6
+MAX_TOTAL_POINTS = 7
 
 ITEM_LABELS = {
     "listening": "听力",
     "reading": "阅读",
     "writing": "英语作文",
     "vocabulary": "背单词",
+    "speaking": "口语",
     "running": "跑步",
 }
 ALLOWED_UPLOAD_TYPES = {
@@ -69,18 +75,20 @@ async def get_activity(db: AsyncSession = Depends(get_db)):
 @router.get("/api/submissions/today", response_model=PublicDailyCheckinOut | None)
 async def get_today_submission(
     student_id: str = Query(...),
+    checkin_date: date | None = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
     if not student_id.strip():
         raise HTTPException(status_code=400, detail="学号不能为空")
 
     activity = await get_or_create_activity_settings(db)
-    checkin_date = get_checkin_date_at(activity, datetime.now(CHINA_TZ))
+    now = datetime.now(CHINA_TZ)
+    target_date = _resolve_checkin_date(activity, now, checkin_date)
 
     result = await db.execute(
         select(DailyCheckin)
         .where(DailyCheckin.student_id == student_id.strip())
-        .where(DailyCheckin.checkin_date == checkin_date)
+        .where(DailyCheckin.checkin_date == target_date)
         .options(selectinload(DailyCheckin.items).selectinload(CheckinItem.attachments))
     )
     checkin = result.scalar_one_or_none()
@@ -146,13 +154,14 @@ async def get_my_stats(
 async def download_my_attachment(
     attachment_id: str,
     student_id: str = Query(...),
+    checkin_date: date | None = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
     if not student_id.strip():
         raise HTTPException(status_code=400, detail="学号不能为空")
 
     activity = await get_or_create_activity_settings(db)
-    checkin_date = get_checkin_date_at(activity, datetime.now(CHINA_TZ))
+    target_date = _resolve_checkin_date(activity, datetime.now(CHINA_TZ), checkin_date)
 
     result = await db.execute(
         select(CheckinAttachment)
@@ -160,7 +169,7 @@ async def download_my_attachment(
         .join(DailyCheckin, CheckinItem.checkin_id == DailyCheckin.id)
         .where(CheckinAttachment.id == attachment_id)
         .where(DailyCheckin.student_id == student_id.strip())
-        .where(DailyCheckin.checkin_date == checkin_date)
+        .where(DailyCheckin.checkin_date == target_date)
     )
     attachment = result.scalar_one_or_none()
     if not attachment:
@@ -175,6 +184,7 @@ async def create_submission(
     name: str = Form(...),
     student_id: str = Form(...),
     items_payload: str = Form(...),
+    checkin_date: date | None = Form(None),
     attachment_item_types: list[str] | None = Form(None),
     attachments: list[UploadFile] | None = File(None),
     db: AsyncSession = Depends(get_db),
@@ -192,17 +202,19 @@ async def create_submission(
 
     activity = await get_or_create_activity_settings(db)
     now = datetime.now(CHINA_TZ)
-    if not is_within_checkin_window(activity, now):
+    current_checkin_date = get_checkin_date_at(activity, now)
+    is_makeup_submission = _is_makeup_date_allowed(now.date(), checkin_date)
+    if not is_makeup_submission and not is_within_checkin_window(activity, now):
         raise HTTPException(
             status_code=400,
             detail=f"当前不在打卡有效时间内，本活动有效时间为 {checkin_window_label(activity)}",
         )
-    checkin_date = get_checkin_date_at(activity, now)
+    target_date = _resolve_checkin_date(activity, now, checkin_date)
 
     result = await db.execute(
         select(DailyCheckin)
         .where(DailyCheckin.student_id == student_id.strip())
-        .where(DailyCheckin.checkin_date == checkin_date)
+        .where(DailyCheckin.checkin_date == target_date)
         .options(selectinload(DailyCheckin.items).selectinload(CheckinItem.attachments))
     )
     checkin = result.scalar_one_or_none()
@@ -211,7 +223,7 @@ async def create_submission(
         checkin = DailyCheckin(
             name=name.strip(),
             student_id=student_id.strip(),
-            checkin_date=checkin_date,
+            checkin_date=target_date,
             first_submitted_at=now,
             ip_address=request.client.host if request.client else None,
         )
@@ -269,12 +281,14 @@ async def create_submission(
     has_valid_item = base_points > 0
     if has_valid_item and checkin.first_valid_at is None:
         checkin.first_valid_at = now
-        checkin.earned_morning_bonus = MORNING_START <= now.time() <= MORNING_END
+        checkin.earned_morning_bonus = (
+            target_date == current_checkin_date and MORNING_START <= now.time() <= MORNING_END
+        )
 
-    checkin.base_points = min(base_points, 5)
+    checkin.base_points = min(base_points, MAX_BASE_POINTS)
     checkin.total_volume = total_volume
     bonus_points = 1 if checkin.earned_morning_bonus and checkin.base_points > 0 else 0
-    checkin.total_points = min(checkin.base_points + bonus_points, 6)
+    checkin.total_points = min(checkin.base_points + bonus_points, MAX_TOTAL_POINTS)
     checkin.updated_at = now
 
     await db.commit()
@@ -313,6 +327,8 @@ def _build_public_checkin(checkin: DailyCheckin) -> dict[str, Any]:
                 "reading_questions": item.reading_questions,
                 "writing_words": item.writing_words,
                 "vocabulary_words": item.vocabulary_words,
+                "speaking_minutes": item.speaking_minutes,
+                "speaking_dialogue_sentences": item.speaking_dialogue_sentences,
                 "running_distance_km": item.running_distance_km,
                 "running_pace_min_per_km": item.running_pace_min_per_km,
                 "attachments": [
@@ -352,6 +368,25 @@ def _parse_items_payload(items_payload: str) -> dict[str, dict[str, Any]]:
     return item_inputs
 
 
+def _resolve_checkin_date(activity: Any, now: datetime, requested_date: date | None) -> date:
+    current_checkin_date = get_checkin_date_at(activity, now)
+    if requested_date is None or requested_date == current_checkin_date:
+        return current_checkin_date
+
+    today = now.date()
+    if _is_makeup_date_allowed(today, requested_date):
+        return requested_date
+
+    raise HTTPException(status_code=400, detail="当前不支持补打卡该日期")
+
+
+def _is_makeup_date_allowed(today: date, requested_date: date | None) -> bool:
+    return (
+        requested_date == MAKEUP_CHECKIN_DATE
+        and MAKEUP_WINDOW_START <= today <= MAKEUP_WINDOW_END
+    )
+
+
 def _validate_attachments(
     item_inputs: dict[str, dict[str, Any]],
     attachment_item_types: list[str],
@@ -381,8 +416,11 @@ def _validate_attachments(
 
 
 def _int_value(values: dict[str, Any], key: str) -> int:
+    raw_value = values.get(key, 0)
+    if raw_value in (None, ""):
+        return 0
     try:
-        value = int(values.get(key, 0))
+        value = int(raw_value)
     except (TypeError, ValueError):
         raise HTTPException(status_code=400, detail="项目完成量必须是数字")
     if value < 0:
@@ -391,8 +429,11 @@ def _int_value(values: dict[str, Any], key: str) -> int:
 
 
 def _float_value(values: dict[str, Any], key: str) -> float:
+    raw_value = values.get(key, 0)
+    if raw_value in (None, ""):
+        return 0
     try:
-        value = float(values.get(key, 0))
+        value = float(raw_value)
     except (TypeError, ValueError):
         raise HTTPException(status_code=400, detail="项目完成量必须是数字")
     if value < 0:
@@ -407,6 +448,8 @@ def _evaluate_item(item_type: str, values: dict[str, Any]) -> dict[str, Any]:
         "reading_questions": None,
         "writing_words": None,
         "vocabulary_words": None,
+        "speaking_minutes": None,
+        "speaking_dialogue_sentences": None,
         "running_distance_km": None,
         "running_pace_min_per_km": None,
     }
@@ -435,6 +478,15 @@ def _evaluate_item(item_type: str, values: dict[str, Any]) -> dict[str, Any]:
         words = _int_value(values, "vocabulary_words")
         is_valid = words >= 20
         data.update(vocabulary_words=words, volume_score=words / 20 if words else 0)
+    elif item_type == "speaking":
+        minutes = _float_value(values, "speaking_minutes")
+        sentences = _int_value(values, "speaking_dialogue_sentences")
+        is_valid = minutes >= 10 or sentences >= 15
+        data.update(
+            speaking_minutes=minutes,
+            speaking_dialogue_sentences=sentences,
+            volume_score=max(minutes / 10 if minutes else 0, sentences / 15 if sentences else 0),
+        )
     else:
         distance = _float_value(values, "running_distance_km")
         pace = _float_value(values, "running_pace_min_per_km")

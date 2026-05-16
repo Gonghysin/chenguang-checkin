@@ -84,6 +84,8 @@ class CheckinItem(Base):
     reading_questions = Column(Integer, nullable=True)
     writing_words = Column(Integer, nullable=True)
     vocabulary_words = Column(Integer, nullable=True)
+    speaking_minutes = Column(Float, nullable=True)
+    speaking_dialogue_sentences = Column(Integer, nullable=True)
     running_distance_km = Column(Float, nullable=True)
     running_pace_min_per_km = Column(Float, nullable=True)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

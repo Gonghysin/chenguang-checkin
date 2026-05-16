@@ -51,6 +51,8 @@ class CheckinItemOut(BaseModel):
     reading_questions: Optional[int] = None
     writing_words: Optional[int] = None
     vocabulary_words: Optional[int] = None
+    speaking_minutes: Optional[float] = None
+    speaking_dialogue_sentences: Optional[int] = None
     running_distance_km: Optional[float] = None
     running_pace_min_per_km: Optional[float] = None
     attachments: list[CheckinAttachmentOut] = Field(default_factory=list)
@@ -98,6 +100,8 @@ class PublicCheckinItemOut(BaseModel):
     reading_questions: Optional[int] = None
     writing_words: Optional[int] = None
     vocabulary_words: Optional[int] = None
+    speaking_minutes: Optional[float] = None
+    speaking_dialogue_sentences: Optional[int] = None
     running_distance_km: Optional[float] = None
     running_pace_min_per_km: Optional[float] = None
     attachments: list[PublicCheckinAttachmentOut] = Field(default_factory=list)
@@ -151,6 +155,7 @@ class RankingOut(BaseModel):
     reading_count: int
     writing_count: int
     vocabulary_count: int
+    speaking_count: int
     running_count: int
     last_updated_at: Optional[datetime] = None
 
@@ -167,6 +172,7 @@ class PublicRankingOut(BaseModel):
     reading_count: int
     writing_count: int
     vocabulary_count: int
+    speaking_count: int
     running_count: int
 
 

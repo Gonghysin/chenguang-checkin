@@ -24,6 +24,7 @@ def build_ranking_rows(checkins: list[DailyCheckin]) -> list[dict[str, Any]]:
                 "reading_count": 0,
                 "writing_count": 0,
                 "vocabulary_count": 0,
+                "speaking_count": 0,
                 "running_count": 0,
                 "last_updated_at": None,
             },
@@ -74,5 +75,6 @@ def public_ranking_payload(row: dict[str, Any]) -> dict[str, Any]:
         "reading_count": row["reading_count"],
         "writing_count": row["writing_count"],
         "vocabulary_count": row["vocabulary_count"],
+        "speaking_count": row["speaking_count"],
         "running_count": row["running_count"],
     }

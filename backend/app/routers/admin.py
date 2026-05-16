@@ -36,7 +36,7 @@ from app.services.oss import get_oss_client
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
-ITEM_ORDER = ["listening", "reading", "writing", "vocabulary", "running"]
+ITEM_ORDER = ["listening", "reading", "writing", "vocabulary", "speaking", "running"]
 LOGIN_FAILURES: dict[str, dict[str, float | int]] = {}
 
 

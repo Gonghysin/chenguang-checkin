@@ -37,9 +37,13 @@ type ItemValues = {
   reading_questions: string;
   writing_words: string;
   vocabulary_words: string;
+  speaking_minutes: string;
+  speaking_dialogue_sentences: string;
   running_distance_km: string;
   running_pace_min_per_km: string;
 };
+
+type CheckinTarget = "today" | "makeup";
 
 const ITEM_META: Array<{
   type: CheckinItemType;
@@ -50,8 +54,13 @@ const ITEM_META: Array<{
   { type: "reading", label: "阅读", target: "2 道阅读且不少于 10 小题" },
   { type: "writing", label: "英语作文", target: "不少于 100 词" },
   { type: "vocabulary", label: "背单词", target: "App 新学 20 个以上单词" },
+  { type: "speaking", label: "口语", target: "不少于 10 min 或不少于 15 句对话" },
   { type: "running", label: "跑步", target: "2 公里及以上，配速 <= 10 min/km" },
 ];
+
+const MAKEUP_CHECKIN_DATE = "2026-05-15";
+const MAKEUP_WINDOW_START = "2026-05-16";
+const MAKEUP_WINDOW_END = "2026-05-17";
 
 const EMPTY_ITEM: ItemValues = {
   selected: false,
@@ -60,6 +69,8 @@ const EMPTY_ITEM: ItemValues = {
   reading_questions: "",
   writing_words: "",
   vocabulary_words: "",
+  speaking_minutes: "",
+  speaking_dialogue_sentences: "",
   running_distance_km: "",
   running_pace_min_per_km: "",
 };
@@ -69,6 +80,7 @@ const initialItems = (): Record<CheckinItemType, ItemValues> => ({
   reading: { ...EMPTY_ITEM },
   writing: { ...EMPTY_ITEM },
   vocabulary: { ...EMPTY_ITEM },
+  speaking: { ...EMPTY_ITEM },
   running: { ...EMPTY_ITEM },
 });
 
@@ -77,6 +89,7 @@ const initialFiles = (): Record<CheckinItemType, File[]> => ({
   reading: [],
   writing: [],
   vocabulary: [],
+  speaking: [],
   running: [],
 });
 
@@ -85,6 +98,7 @@ const initialAttachments = (): Record<CheckinItemType, CheckinAttachment[]> => (
   reading: [],
   writing: [],
   vocabulary: [],
+  speaking: [],
   running: [],
 });
 
@@ -98,6 +112,8 @@ export default function SubmitForm() {
   const [activity, setActivity] = useState<ActivitySettings | null>(null);
   const [rankings, setRankings] = useState<PublicRanking[]>([]);
   const [myStats, setMyStats] = useState<PublicUserStats | null>(null);
+  const [checkinTarget, setCheckinTarget] = useState<CheckinTarget>("today");
+  const [targetCheckin, setTargetCheckin] = useState<SubmissionResult["checkin"] | null>(null);
   const [lockedItemTypes, setLockedItemTypes] = useState<CheckinItemType[]>([]);
   const [submittedValidity, setSubmittedValidity] = useState<Record<CheckinItemType, boolean>>(
     initialSubmittedValidity
@@ -143,18 +159,24 @@ export default function SubmitForm() {
     if (!trimmedStudentId) {
       setLockedItemTypes([]);
       setSubmittedValidity(initialSubmittedValidity());
+      setExistingAttachments(initialAttachments());
+      setTargetCheckin(null);
       return;
     }
 
     const timer = window.setTimeout(() => {
-      getTodayCheckin(trimmedStudentId)
+      getTodayCheckin(trimmedStudentId, checkinTarget === "makeup" ? MAKEUP_CHECKIN_DATE : undefined)
         .then((checkin) => {
           if (!checkin) {
             setLockedItemTypes([]);
             setSubmittedValidity(initialSubmittedValidity());
+            setItems(initialItems());
+            setExistingAttachments(initialAttachments());
+            setTargetCheckin(null);
             return;
           }
 
+          setTargetCheckin(checkin);
           const submittedTypes = checkin.items.map((item) => item.item_type);
           setLockedItemTypes(submittedTypes);
           setSubmittedValidity(validityFromItems(checkin.items));
@@ -165,6 +187,7 @@ export default function SubmitForm() {
           setLockedItemTypes([]);
           setSubmittedValidity(initialSubmittedValidity());
           setExistingAttachments(initialAttachments());
+          setTargetCheckin(null);
         });
 
       getMyStats(trimmedStudentId)
@@ -173,13 +196,24 @@ export default function SubmitForm() {
     }, 300);
 
     return () => window.clearTimeout(timer);
-  }, [studentId]);
+  }, [checkinTarget, studentId]);
+
+  useEffect(() => {
+    setSuccess(null);
+    setError("");
+  }, [checkinTarget]);
 
   const selectedCount = useMemo(
     () => ITEM_META.filter((item) => items[item.type].selected).length,
     [items]
   );
-  const todayCheckin = success?.checkin ?? myStats?.latest_checkin ?? null;
+  const todayCheckin = success?.checkin ?? targetCheckin ?? myStats?.latest_checkin ?? null;
+  const targetLabel = checkinTarget === "makeup" ? "补打卡" : "今日";
+  const makeupWindowOpen = isDateInRange(
+    formatLocalDate(new Date()),
+    MAKEUP_WINDOW_START,
+    MAKEUP_WINDOW_END
+  );
   const successHasEffectivePoints = (success?.checkin.base_points ?? 0) > 0;
   const earnedMorningBonus = Boolean(
     todayCheckin?.earned_morning_bonus && (todayCheckin?.base_points ?? 0) > 0
@@ -190,7 +224,7 @@ export default function SubmitForm() {
 
   const setSelected = useCallback((type: CheckinItemType, selected: boolean) => {
     if (!selected && lockedItemTypes.includes(type)) {
-      setError("今天已提交过该项目，可以修改完成量或继续上传新截图，不能取消该项目");
+      setError(`${targetLabel}已提交过该项目，可以修改完成量或继续上传新截图，不能取消该项目`);
       return;
     }
     setItems((prev) => ({
@@ -198,7 +232,7 @@ export default function SubmitForm() {
       [type]: { ...prev[type], selected },
     }));
     setError("");
-  }, [lockedItemTypes]);
+  }, [lockedItemTypes, targetLabel]);
 
   const setValue = useCallback((type: CheckinItemType, key: keyof ItemValues, value: string) => {
     setItems((prev) => ({
@@ -236,14 +270,18 @@ export default function SubmitForm() {
         return;
       }
       try {
-        const res = await getMyAttachmentDownloadUrl(attachment.id, trimmedStudentId);
+        const res = await getMyAttachmentDownloadUrl(
+          attachment.id,
+          trimmedStudentId,
+          checkinTarget === "makeup" ? MAKEUP_CHECKIN_DATE : undefined
+        );
         setPreviewUrl(res.download_url);
         setPreviewTitle(attachment.display_name || attachment.file_name || "打卡截图");
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "附件打开失败");
       }
     },
-    [studentId]
+    [checkinTarget, studentId]
   );
 
   const handleSubmit = useCallback(
@@ -276,6 +314,9 @@ export default function SubmitForm() {
       formData.append("name", name.trim());
       formData.append("student_id", studentId.trim());
       formData.append("items_payload", JSON.stringify(payload));
+      if (checkinTarget === "makeup") {
+        formData.append("checkin_date", MAKEUP_CHECKIN_DATE);
+      }
 
       for (const meta of ITEM_META) {
         for (const file of files[meta.type]) {
@@ -288,6 +329,7 @@ export default function SubmitForm() {
       try {
         const result = await submitForm(formData);
         setSuccess(result);
+        setTargetCheckin(result.checkin);
         setFiles(initialFiles());
         const submittedTypes = result.checkin.items.map((item) => item.item_type);
         setLockedItemTypes(submittedTypes);
@@ -306,7 +348,7 @@ export default function SubmitForm() {
         setLoading(false);
       }
     },
-    [files, items, lockedItemTypes, name, selectedCount, studentId]
+    [checkinTarget, files, items, lockedItemTypes, name, selectedCount, studentId]
   );
 
   return (
@@ -370,7 +412,7 @@ export default function SubmitForm() {
               {successHasEffectivePoints
                 ? `已保存：基础 ${success.checkin.base_points} 分，早起加分 ${
                     success.checkin.earned_morning_bonus ? 1 : 0
-                  } 分，今日共 ${success.checkin.total_points} 分`
+                  } 分，${targetLabel}共 ${success.checkin.total_points} 分`
                 : "已提交，但当前完成量未达到有效打卡要求，暂未加分。可修改完成量后重新保存。"}
             </span>
           </div>
@@ -409,8 +451,43 @@ export default function SubmitForm() {
         <MyStatsCard stats={myStats} />
 
         <div>
+          <label className="mb-2 block text-sm font-medium text-gray-700">打卡日期</label>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => setCheckinTarget("today")}
+              className={`rounded-lg border px-3 py-2 text-left text-sm ${
+                checkinTarget === "today"
+                  ? "border-emerald-500 bg-emerald-50 text-emerald-800"
+                  : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              今日打卡
+            </button>
+            {makeupWindowOpen && (
+              <button
+                type="button"
+                onClick={() => setCheckinTarget("makeup")}
+                className={`rounded-lg border px-3 py-2 text-left text-sm ${
+                  checkinTarget === "makeup"
+                    ? "border-amber-500 bg-amber-50 text-amber-900"
+                    : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
+                }`}
+              >
+                补打 2026-05-15
+              </button>
+            )}
+          </div>
+          {checkinTarget === "makeup" && (
+            <p className="mt-2 text-xs leading-5 text-amber-700">
+              2026-05-15 补打卡入口仅在 2026-05-16 至 2026-05-17 开放。
+            </p>
+          )}
+        </div>
+
+        <div>
           <div className="mb-2 flex items-center justify-between">
-            <label className="text-sm font-medium text-gray-700">今日项目</label>
+            <label className="text-sm font-medium text-gray-700">{targetLabel}项目</label>
             <span className="text-xs text-gray-500">已选 {selectedCount} 项</span>
           </div>
           <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-6">
@@ -433,7 +510,7 @@ export default function SubmitForm() {
                 最早有效：{firstValidTime}
               </span>
               <span className="mt-1 block text-xs text-gray-500">
-                {earnedMorningBonus ? "今日有早起加分" : "今日暂无早起加分"}
+                {earnedMorningBonus ? `${targetLabel}有早起加分` : `${targetLabel}暂无早起加分`}
               </span>
             </div>
             {ITEM_META.map((meta) => (
@@ -473,7 +550,7 @@ export default function SubmitForm() {
           className="flex w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-3 text-base font-medium text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <Send size={18} />
-          {loading ? "提交中..." : "保存今日打卡"}
+          {loading ? "提交中..." : checkinTarget === "makeup" ? "保存补打卡" : "保存今日打卡"}
         </button>
       </form>
 
@@ -550,6 +627,12 @@ function buildItemPayload(type: CheckinItemType, item: ItemValues): Record<strin
   }
   if (type === "writing") return { writing_words: item.writing_words };
   if (type === "vocabulary") return { vocabulary_words: item.vocabulary_words };
+  if (type === "speaking") {
+    return {
+      speaking_minutes: item.speaking_minutes,
+      speaking_dialogue_sentences: item.speaking_dialogue_sentences,
+    };
+  }
   return {
     running_distance_km: item.running_distance_km,
     running_pace_min_per_km: item.running_pace_min_per_km,
@@ -570,6 +653,8 @@ function applyExistingCheckin(
       reading_questions: valueToString(item.reading_questions),
       writing_words: valueToString(item.writing_words),
       vocabulary_words: valueToString(item.vocabulary_words),
+      speaking_minutes: valueToString(item.speaking_minutes),
+      speaking_dialogue_sentences: valueToString(item.speaking_dialogue_sentences),
       running_distance_km: valueToString(item.running_distance_km),
       running_pace_min_per_km: valueToString(item.running_pace_min_per_km),
     };
@@ -579,6 +664,17 @@ function applyExistingCheckin(
 
 function valueToString(value: number | null) {
   return value === null ? "" : String(value);
+}
+
+function formatLocalDate(value: Date) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function isDateInRange(value: string, start: string, end: string) {
+  return value >= start && value <= end;
 }
 
 function attachmentsFromItems(items: CheckinItem[]): Record<CheckinItemType, CheckinAttachment[]> {
@@ -595,6 +691,7 @@ function initialSubmittedValidity(): Record<CheckinItemType, boolean> {
     reading: false,
     writing: false,
     vocabulary: false,
+    speaking: false,
     running: false,
   };
 }
@@ -684,6 +781,23 @@ function ItemSection({
             value={values.vocabulary_words}
             onChange={(value) => onValueChange(meta.type, "vocabulary_words", value)}
           />
+        )}
+        {meta.type === "speaking" && (
+          <>
+            <NumberInput
+              label="口语练习分钟数"
+              step="0.1"
+              required={false}
+              value={values.speaking_minutes}
+              onChange={(value) => onValueChange(meta.type, "speaking_minutes", value)}
+            />
+            <NumberInput
+              label="对话句数"
+              required={false}
+              value={values.speaking_dialogue_sentences}
+              onChange={(value) => onValueChange(meta.type, "speaking_dialogue_sentences", value)}
+            />
+          </>
         )}
         {meta.type === "running" && (
           <>
@@ -792,8 +906,8 @@ function MyStatsCard({ stats }: { stats: PublicUserStats | null }) {
       </div>
       <div className="mt-3 text-xs leading-5 text-gray-500">
         听 {stats?.listening_count ?? 0} / 读 {stats?.reading_count ?? 0} / 写{" "}
-        {stats?.writing_count ?? 0} / 词 {stats?.vocabulary_count ?? 0} / 跑{" "}
-        {stats?.running_count ?? 0}
+        {stats?.writing_count ?? 0} / 词 {stats?.vocabulary_count ?? 0} / 口{" "}
+        {stats?.speaking_count ?? 0} / 跑 {stats?.running_count ?? 0}
       </div>
     </section>
   );
@@ -815,13 +929,14 @@ function RulesModal({
     <Modal title="活动公告与积分规则" onClose={onClose}>
       <ul className="list-disc space-y-3 pl-5 text-sm leading-6 text-gray-700">
         <li>当前打卡有效时间为 {checkinWindow}；若结束时间早于开始时间，则自动跨天计算。</li>
-        <li>每天可提交听力、阅读、英语作文、背单词、跑步五类项目，每个达标项目记 1 分。</li>
+        <li>每天可提交听力、阅读、英语作文、背单词、口语、跑步六类项目，每个达标项目记 1 分。</li>
         <li>未达到打卡指标的项目可以保存提交记录，但不会有效加分。</li>
         <li>当天 06:30:00 至 07:40:00 内首次有效打卡可额外获得 1 分早起加分。</li>
-        <li>每日最高 6 分，其中基础项目最高 5 分，早起加分最高 1 分。</li>
+        <li>每日最高 7 分，其中基础项目最高 6 分，早起加分最高 1 分。</li>
         <li>同一项目提交后不能取消，可以修改完成量，也可以继续追加新的截图。</li>
         <li>听力不少于 10 小题；阅读为 2 道阅读且不少于 10 小题；作文不少于 100 词。</li>
-        <li>背单词需 App 新学 20 个以上；跑步需 2 公里及以上，配速不慢于 10 min/km。</li>
+        <li>背单词需 App 新学 20 个以上；口语不少于 10 min 或不少于 15 句对话。</li>
+        <li>跑步需 2 公里及以上，配速不慢于 10 min/km。</li>
       </ul>
     </Modal>
   );
@@ -945,7 +1060,7 @@ function RankingPanel({
               </div>
               <div className="text-xs leading-5 text-gray-500">
                 听 {row.listening_count} / 读 {row.reading_count} / 写 {row.writing_count} / 词{" "}
-                {row.vocabulary_count} / 跑 {row.running_count}
+                {row.vocabulary_count} / 口 {row.speaking_count} / 跑 {row.running_count}
               </div>
             </div>
           ))}
@@ -959,11 +1074,13 @@ function NumberInput({
   label,
   value,
   step = "1",
+  required = true,
   onChange,
 }: {
   label: string;
   value: string;
   step?: string;
+  required?: boolean;
   onChange: (value: string) => void;
 }) {
   return (
@@ -976,7 +1093,7 @@ function NumberInput({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
-        required
+        required={required}
       />
     </label>
   );

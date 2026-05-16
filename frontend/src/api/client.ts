@@ -70,8 +70,13 @@ export async function getActivity(): Promise<ActivitySettings> {
   return fetchApi("/activity");
 }
 
-export async function getTodayCheckin(studentId: string): Promise<PublicDailyCheckin | null> {
-  const query = new URLSearchParams({ student_id: studentId }).toString();
+export async function getTodayCheckin(
+  studentId: string,
+  checkinDate?: string
+): Promise<PublicDailyCheckin | null> {
+  const params: Record<string, string> = { student_id: studentId };
+  if (checkinDate) params.checkin_date = checkinDate;
+  const query = new URLSearchParams(params).toString();
   return fetchApi(`/submissions/today?${query}`);
 }
 
@@ -86,9 +91,12 @@ export async function listPublicRankings(): Promise<PublicRanking[]> {
 
 export async function getMyAttachmentDownloadUrl(
   id: string,
-  studentId: string
+  studentId: string,
+  checkinDate?: string
 ): Promise<{ download_url: string }> {
-  const query = new URLSearchParams({ student_id: studentId }).toString();
+  const params: Record<string, string> = { student_id: studentId };
+  if (checkinDate) params.checkin_date = checkinDate;
+  const query = new URLSearchParams(params).toString();
   return fetchApi(`/submissions/attachments/${id}/download?${query}`);
 }
 

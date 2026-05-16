@@ -3,6 +3,7 @@ export type CheckinItemType =
   | "reading"
   | "writing"
   | "vocabulary"
+  | "speaking"
   | "running";
 
 export interface ActivitySettings {
@@ -38,6 +39,8 @@ export interface CheckinItem {
   reading_questions: number | null;
   writing_words: number | null;
   vocabulary_words: number | null;
+  speaking_minutes: number | null;
+  speaking_dialogue_sentences: number | null;
   running_distance_km: number | null;
   running_pace_min_per_km: number | null;
   attachments: CheckinAttachment[];
@@ -90,6 +93,7 @@ export interface Ranking {
   reading_count: number;
   writing_count: number;
   vocabulary_count: number;
+  speaking_count: number;
   running_count: number;
   last_updated_at: string | null;
 }
@@ -106,6 +110,7 @@ export interface PublicRanking {
   reading_count: number;
   writing_count: number;
   vocabulary_count: number;
+  speaking_count: number;
   running_count: number;
 }
 

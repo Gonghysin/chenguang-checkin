@@ -44,6 +44,7 @@ const ITEM_LABELS: Record<CheckinItemType, string> = {
   reading: "阅读",
   writing: "作文",
   vocabulary: "单词",
+  speaking: "口语",
   running: "跑步",
 };
 
@@ -211,6 +212,7 @@ export default function DataTable({ onLogout }: DataTableProps) {
         基础积分: row.base_points,
         早起次数: row.morning_bonus_count,
         有效天数: row.valid_days,
+        口语次数: row.speaking_count,
         总完成量: row.total_volume,
       }));
     }
@@ -645,7 +647,7 @@ function ParticipantsView({
                 <td className="px-4 py-3 text-gray-700">
                   基础 {student.base_points} / 早起 {student.morning_bonus_count} / 听{" "}
                   {student.listening_count} / 读 {student.reading_count} / 写 {student.writing_count} /
-                  词 {student.vocabulary_count} / 跑 {student.running_count}
+                  词 {student.vocabulary_count} / 口 {student.speaking_count} / 跑 {student.running_count}
                 </td>
                 <td className="px-4 py-3">
                   <button
@@ -720,7 +722,7 @@ function RankingsView({ rankings, loading }: { rankings: Ranking[]; loading: boo
                 </td>
                 <td className="px-4 py-3 text-gray-700">
                   听 {row.listening_count} / 读 {row.reading_count} / 写 {row.writing_count} /
-                  词 {row.vocabulary_count} / 跑 {row.running_count}
+                  词 {row.vocabulary_count} / 口 {row.speaking_count} / 跑 {row.running_count}
                 </td>
                 <td className="px-4 py-3 text-gray-700">{row.total_volume.toFixed(2)}</td>
               </tr>
@@ -1040,6 +1042,11 @@ function describeItemValues(item: DailyCheckin["items"][number]) {
   }
   if (item.item_type === "writing") return `作文词数：${item.writing_words ?? 0}`;
   if (item.item_type === "vocabulary") return `新学单词数：${item.vocabulary_words ?? 0}`;
+  if (item.item_type === "speaking") {
+    return `口语练习：${item.speaking_minutes ?? 0} min，对话句数：${
+      item.speaking_dialogue_sentences ?? 0
+    }`;
+  }
   return `距离：${item.running_distance_km ?? 0} km，配速：${item.running_pace_min_per_km ?? 0} min/km`;
 }
 
