@@ -20,7 +20,13 @@ from app.schemas import (
     DailyCheckinOut,
     RankingOut,
 )
-from app.services.activity import build_activity_response, get_or_create_activity_settings
+from app.services.activity import (
+    MAX_TOTAL_POINTS,
+    MORNING_BONUS_POINTS,
+    build_activity_response,
+    get_or_create_activity_settings,
+    should_earn_morning_bonus,
+)
 from app.services.auth import verify_password
 from app.services.rankings import build_ranking_rows
 from app.services.session import (
@@ -350,6 +356,8 @@ async def update_admin_activity(
     for field_name, value in {
         "打卡开始时间": payload.checkin_start_time,
         "打卡结束时间": payload.checkin_end_time,
+        "早起加分开始时间": payload.morning_bonus_start_time,
+        "早起加分结束时间": payload.morning_bonus_end_time,
     }.items():
         try:
             datetime.strptime(value, "%H:%M")
@@ -362,10 +370,33 @@ async def update_admin_activity(
     activity.duration_days = payload.duration_days
     activity.checkin_start_time = payload.checkin_start_time
     activity.checkin_end_time = payload.checkin_end_time
+    activity.morning_bonus_start_time = payload.morning_bonus_start_time
+    activity.morning_bonus_end_time = payload.morning_bonus_end_time
     activity.is_active = payload.is_active
+    await _recalculate_activity_morning_bonus(db, activity)
     await db.commit()
     await db.refresh(activity)
     return build_activity_response(activity)
+
+
+async def _recalculate_activity_morning_bonus(db: AsyncSession, activity) -> None:
+    result = await db.execute(select(DailyCheckin))
+
+    for checkin in result.scalars():
+        earned_morning_bonus = should_earn_morning_bonus(
+            activity,
+            checkin.checkin_date,
+            checkin.first_valid_at,
+            checkin.base_points,
+        )
+        bonus_points = MORNING_BONUS_POINTS if earned_morning_bonus else 0
+        total_points = min(checkin.base_points + bonus_points, MAX_TOTAL_POINTS)
+        if (
+            checkin.earned_morning_bonus != earned_morning_bonus
+            or checkin.total_points != total_points
+        ):
+            checkin.earned_morning_bonus = earned_morning_bonus
+            checkin.total_points = total_points
 
 
 @router.get("/attachments/{attachment_id}/download")

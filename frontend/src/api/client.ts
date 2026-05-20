@@ -160,7 +160,14 @@ export async function getAdminActivity(): Promise<ActivitySettings> {
 export async function updateAdminActivity(
   payload: Pick<
     ActivitySettings,
-    "name" | "start_date" | "duration_days" | "checkin_start_time" | "checkin_end_time" | "is_active"
+    | "name"
+    | "start_date"
+    | "duration_days"
+    | "checkin_start_time"
+    | "checkin_end_time"
+    | "morning_bonus_start_time"
+    | "morning_bonus_end_time"
+    | "is_active"
   >
 ): Promise<ActivitySettings> {
   return fetchApi("/admin/activity", {

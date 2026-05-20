@@ -230,6 +230,10 @@ export default function SubmitForm() {
   const firstValidTime = todayCheckin?.first_valid_at
     ? formatTime(todayCheckin.first_valid_at)
     : "暂无有效打卡";
+  const bonusWindowLabel =
+    activity?.morning_bonus_start_time && activity?.morning_bonus_end_time
+      ? `${activity.morning_bonus_start_time}-${activity.morning_bonus_end_time}`
+      : "06:30-07:40";
 
   const setSelected = useCallback((type: CheckinItemType, selected: boolean) => {
     if (!selected && lockedItemTypes.includes(type)) {
@@ -369,7 +373,7 @@ export default function SubmitForm() {
               晨光打卡
             </h1>
             <p className="mt-1 text-sm text-gray-500">
-              06:30-07:40 首次有效打卡可获得早起加分
+              {bonusWindowLabel} 首次有效打卡可获得早起加分
             </p>
           </div>
           <div className="w-full md:w-64">
@@ -517,6 +521,9 @@ export default function SubmitForm() {
               </span>
               <span className="mt-1 block text-xs text-gray-500">
                 最早有效：{firstValidTime}
+              </span>
+              <span className="mt-1 block text-xs text-gray-500">
+                时段：{bonusWindowLabel}
               </span>
               <span className="mt-1 block text-xs text-gray-500">
                 {earnedMorningBonus ? `${targetLabel}有早起加分` : `${targetLabel}暂无早起加分`}
@@ -938,6 +945,10 @@ function RulesModal({
     activity?.checkin_start_time && activity?.checkin_end_time
       ? `${activity.checkin_start_time} 至 ${activity.checkin_end_time}`
       : "06:00 至 04:00";
+  const bonusWindow =
+    activity?.morning_bonus_start_time && activity?.morning_bonus_end_time
+      ? `${activity.morning_bonus_start_time} 至 ${activity.morning_bonus_end_time}`
+      : "06:30 至 07:40";
 
   return (
     <Modal title="活动公告与积分规则" onClose={onClose}>
@@ -945,7 +956,7 @@ function RulesModal({
         <li>当前打卡有效时间为 {checkinWindow}；若结束时间早于开始时间，则自动跨天计算。</li>
         <li>每天可提交听力、阅读、英语作文、背单词、口语、跑步六类项目，每个达标项目记 1 分。</li>
         <li>未达到打卡指标的项目可以保存提交记录，但不会有效加分。</li>
-        <li>当天 06:30:00 至 07:40:00 内首次有效打卡可额外获得 1 分早起加分。</li>
+        <li>当天 {bonusWindow} 内首次有效打卡可额外获得 1 分早起加分。</li>
         <li>每日最高 7 分，其中基础项目最高 6 分，早起加分最高 1 分。</li>
         <li>同一项目提交后不能取消，可以修改完成量，也可以继续追加新的截图。</li>
         <li>听力不少于 10 小题；阅读为 2 道阅读且不少于 10 小题；作文不少于 100 词。</li>

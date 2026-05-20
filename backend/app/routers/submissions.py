@@ -2,7 +2,7 @@ import json
 import logging
 import re
 import uuid
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -21,6 +21,9 @@ from app.services.activity import (
     get_checkin_date_at,
     get_or_create_activity_settings,
     is_within_checkin_window,
+    MAX_TOTAL_POINTS,
+    MORNING_BONUS_POINTS,
+    should_earn_morning_bonus,
 )
 from app.services.rankings import build_ranking_rows, public_ranking_payload
 from app.schemas import (
@@ -35,13 +38,10 @@ router = APIRouter(tags=["submissions"])
 logger = logging.getLogger(__name__)
 
 CHINA_TZ = ZoneInfo("Asia/Shanghai")
-MORNING_START = time(6, 30, 0)
-MORNING_END = time(7, 40, 0)
 MAKEUP_CHECKIN_DATE = date(2026, 5, 15)
 MAKEUP_WINDOW_START = date(2026, 5, 16)
 MAKEUP_WINDOW_END = date(2026, 5, 17)
 MAX_BASE_POINTS = 6
-MAX_TOTAL_POINTS = 7
 
 ITEM_LABELS = {
     "listening": "听力",
@@ -202,7 +202,6 @@ async def create_submission(
 
     activity = await get_or_create_activity_settings(db)
     now = datetime.now(CHINA_TZ)
-    current_checkin_date = get_checkin_date_at(activity, now)
     is_makeup_submission = _is_makeup_date_allowed(now.date(), checkin_date)
     if not is_makeup_submission and not is_within_checkin_window(activity, now):
         raise HTTPException(
@@ -283,13 +282,16 @@ async def create_submission(
     has_valid_item = base_points > 0
     if has_valid_item and checkin.first_valid_at is None:
         checkin.first_valid_at = now
-        checkin.earned_morning_bonus = (
-            target_date == current_checkin_date and MORNING_START <= now.time() <= MORNING_END
+        checkin.earned_morning_bonus = should_earn_morning_bonus(
+            activity,
+            target_date,
+            checkin.first_valid_at,
+            min(base_points, MAX_BASE_POINTS),
         )
 
     checkin.base_points = min(base_points, MAX_BASE_POINTS)
     checkin.total_volume = total_volume
-    bonus_points = 1 if checkin.earned_morning_bonus and checkin.base_points > 0 else 0
+    bonus_points = MORNING_BONUS_POINTS if checkin.earned_morning_bonus and checkin.base_points > 0 else 0
     checkin.total_points = min(checkin.base_points + bonus_points, MAX_TOTAL_POINTS)
     checkin.updated_at = now
 

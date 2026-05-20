@@ -36,6 +36,8 @@ class ActivitySettings(Base):
     duration_days = Column(Integer, nullable=False, default=21)
     checkin_start_time = Column(String(5), nullable=False, default="06:00")
     checkin_end_time = Column(String(5), nullable=False, default="04:00")
+    morning_bonus_start_time = Column(String(5), nullable=False, default="06:30")
+    morning_bonus_end_time = Column(String(5), nullable=False, default="07:40")
     is_active = Column(Boolean, nullable=False, default=True)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

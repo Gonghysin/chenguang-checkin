@@ -192,15 +192,19 @@ export default function DataTable({ onLogout }: DataTableProps) {
         duration_days: activity.duration_days,
         checkin_start_time: activity.checkin_start_time,
         checkin_end_time: activity.checkin_end_time,
+        morning_bonus_start_time: activity.morning_bonus_start_time,
+        morning_bonus_end_time: activity.morning_bonus_end_time,
         is_active: activity.is_active,
       });
       setActivity(saved);
-      setSettingsMessage("活动设置已保存");
+      setSettingsMessage("活动设置已保存，已有记录积分已按当前早起时间重算");
+      fetchRecords(page);
       fetchRankings();
+      fetchParticipants();
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "保存失败");
     }
-  }, [activity, fetchRankings]);
+  }, [activity, fetchParticipants, fetchRankings, fetchRecords, page]);
 
   const exportRows = useMemo(() => {
     if (tab === "rankings") {
@@ -803,6 +807,33 @@ function SettingsView({
         </div>
         <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
           如果结束时间早于开始时间，系统会自动跨天计算。例如 06:00 到 04:00 表示早上 6 点至次日凌晨 4 点都归入开始当天。
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="block">
+            <span className="mb-1 block text-sm font-medium text-gray-700">早起加分开始时间</span>
+            <input
+              type="time"
+              value={activity.morning_bonus_start_time}
+              onChange={(event) =>
+                onChange({ ...activity, morning_bonus_start_time: event.target.value })
+              }
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-100"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-sm font-medium text-gray-700">早起加分结束时间</span>
+            <input
+              type="time"
+              value={activity.morning_bonus_end_time}
+              onChange={(event) =>
+                onChange({ ...activity, morning_bonus_end_time: event.target.value })
+              }
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-100"
+            />
+          </label>
+        </div>
+        <div className="rounded-lg bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-800">
+          保存后会按新的早起加分时间重算活动周期内已有记录。
         </div>
         <label className="flex items-center gap-2 text-sm text-gray-700">
           <input
